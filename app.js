@@ -39,6 +39,7 @@ const els = {
   sheetFileInput: document.querySelector("#sheetFileInput"),
   palette: document.querySelector("#palette"),
   paintTool: document.querySelector("#paintTool"),
+  dropTool: document.querySelector("#dropTool"),
   eraseTool: document.querySelector("#eraseTool"),
   clearGrid: document.querySelector("#clearGrid"),
   themeToggle: document.querySelector("#themeToggle"),
@@ -315,7 +316,6 @@ function renderPalette() {
     card.append(image, label);
     card.addEventListener("click", () => {
       state.selectedTileId = tile.id;
-      state.tool = "paint";
       updateToolButtons();
       renderPalette();
       updateStats();
@@ -342,6 +342,7 @@ function renderLayers() {
 
 function updateToolButtons() {
   els.paintTool.classList.toggle("is-active", state.tool === "paint");
+  els.dropTool.classList.toggle("is-active", state.tool === "drop");
   els.eraseTool.classList.toggle("is-active", state.tool === "erase");
 }
 
@@ -705,6 +706,16 @@ function handleGridClick(event) {
   const layer = activeLayer();
   if (state.tool === "erase") {
     layer.placements.delete(key);
+  } else if (state.tool === "drop") {
+    if (!state.selectedTileId) {
+      setStatus("Select a tile before dropping onto the grid.");
+      return;
+    }
+    if (layer.placements.has(key)) {
+      setStatus("Drop mode only places tiles into empty spots.");
+      return;
+    }
+    layer.placements.set(key, { x: cell.x, y: cell.y, tileId: state.selectedTileId });
   } else if (state.selectedTileId) {
     layer.placements.set(key, { x: cell.x, y: cell.y, tileId: state.selectedTileId });
   } else {
@@ -869,6 +880,10 @@ els.sheetFileInput.addEventListener("change", (event) => {
 });
 els.paintTool.addEventListener("click", () => {
   state.tool = "paint";
+  updateToolButtons();
+});
+els.dropTool.addEventListener("click", () => {
+  state.tool = "drop";
   updateToolButtons();
 });
 els.eraseTool.addEventListener("click", () => {

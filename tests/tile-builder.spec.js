@@ -370,6 +370,50 @@ test("uploads, crops, places, erases, and clears a PNG tile", async ({ page }) =
   await expect(page.locator("#placedCount")).toHaveText("0");
 });
 
+test("drops selected tiles only into empty grid cells", async ({ page }) => {
+  await openApp(page);
+  await setProject(page);
+  await addTile(page, "red.png", pngs.red);
+  await addTile(page, "blue.png", pngs.blue);
+
+  await page.getByRole("button", { name: "Drop" }).click();
+  await expect(page.getByRole("button", { name: "Drop" })).toHaveClass(/is-active/);
+
+  await page.locator(".tile-card", { hasText: "red.png" }).click();
+  await clickCell(page, 1, 1);
+  await expect(page.locator("#placedCount")).toHaveText("1");
+
+  await page.locator(".tile-card", { hasText: "blue.png" }).click();
+  await expect(page.getByRole("button", { name: "Drop" })).toHaveClass(/is-active/);
+  await clickCell(page, 1, 1);
+  await expect(page.locator("#placedCount")).toHaveText("1");
+  await expect(page.locator("#projectStatus")).toHaveText("Drop mode only places tiles into empty spots.");
+
+  await clickCell(page, 2, 1);
+  await expect(page.locator("#placedCount")).toHaveText("2");
+
+  await page.getByRole("button", { name: "Export PNG" }).click();
+  const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
+  const exported = await exportInfo.jsonValue();
+  const inspected = await page.evaluate(async (href) => {
+    const image = new Image();
+    image.src = href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    return {
+      first: [...ctx.getImageData(32, 16, 1, 1).data],
+      second: [...ctx.getImageData(96, 16, 1, 1).data]
+    };
+  }, exported.href);
+
+  expect(inspected.first[0]).toBeGreaterThan(inspected.first[2]);
+  expect(inspected.second[2]).toBeGreaterThan(inspected.second[0]);
+});
+
 test("locks crop source scale and aligns to the bottom half of a tall PNG", async ({ page }) => {
   await openApp(page);
   await setProject(page, { cols: 2, rows: 2, tileWidth: 128, tileHeight: 128, exportCols: 1 });
