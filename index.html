@@ -136,47 +136,60 @@
           <button id="skipCrop" class="icon-button" value="skip" type="button" aria-label="Skip this PNG">&times;</button>
         </div>
         <canvas id="cropCanvas" width="560" height="280"></canvas>
-        <div class="crop-size-tools">
-          <label>
-            Crop width
-            <input id="cropWidth" type="number" min="8" max="2048" value="128">
-          </label>
-          <label>
-            Crop height
-            <input id="cropHeight" type="number" min="8" max="2048" value="128">
-          </label>
-          <button id="applyCropSize" class="secondary-button" type="button">Apply Crop Size</button>
-        </div>
-        <div class="crop-scale-tools">
-          <label>
-            Source scale
-            <select id="cropScaleMode">
-              <option value="free">Free zoom</option>
-              <option value="1">1x source pixels</option>
-              <option value="2">2x close crop</option>
-              <option value="0.5">0.5x wide crop</option>
-              <option value="fit">Fit image</option>
-            </select>
-          </label>
-          <p id="cropSourceInfo" class="status-text">Crop source: auto</p>
-        </div>
-        <div class="crop-align-tools" aria-label="Crop alignment tools">
-          <button id="alignTop" class="secondary-button" type="button">Top</button>
-          <button id="alignMiddle" class="secondary-button" type="button">Middle</button>
-          <button id="alignBottom" class="secondary-button" type="button">Bottom</button>
-          <button id="alignLeft" class="secondary-button" type="button">Left</button>
-          <button id="alignCenterX" class="secondary-button" type="button">Center X</button>
-          <button id="alignRight" class="secondary-button" type="button">Right</button>
-        </div>
-        <div class="crop-controls">
-          <label>
-            Zoom
-            <input id="cropZoom" type="range" min="0.25" max="4" step="0.01" value="1">
-          </label>
-          <button id="centerCrop" class="secondary-button" type="button">Center</button>
+        <fieldset class="crop-tool-group">
+          <legend>Crop window</legend>
+          <div class="crop-size-tools">
+            <label>
+              Width
+              <input id="cropWidth" type="number" min="1" max="2048" value="128">
+            </label>
+            <label>
+              Height
+              <input id="cropHeight" type="number" min="1" max="2048" value="128">
+            </label>
+            <label>
+              Padding
+              <input id="cropPadding" type="number" min="0" max="256" value="0">
+            </label>
+            <button id="applyCropSize" class="secondary-button" type="button">Apply Size</button>
+            <button id="autoCropVisible" class="secondary-button" type="button">Auto Crop Visible Pixels</button>
+          </div>
+        </fieldset>
+        <fieldset class="crop-tool-group">
+          <legend>Position</legend>
+          <div class="crop-align-tools" aria-label="Crop alignment tools">
+            <button id="alignTop" class="secondary-button" type="button">Top</button>
+            <button id="alignMiddle" class="secondary-button" type="button">Middle</button>
+            <button id="alignBottom" class="secondary-button" type="button">Bottom</button>
+            <button id="alignLeft" class="secondary-button" type="button">Left</button>
+            <button id="alignCenterX" class="secondary-button" type="button">Center X</button>
+            <button id="alignRight" class="secondary-button" type="button">Right</button>
+          </div>
+        </fieldset>
+        <fieldset class="crop-tool-group">
+          <legend>Source</legend>
+          <div class="crop-scale-tools">
+            <label>
+              Scale
+              <select id="cropScaleMode">
+                <option value="free">Free zoom</option>
+                <option value="1">1x source pixels</option>
+                <option value="2">2x close crop</option>
+                <option value="0.5">0.5x wide crop</option>
+                <option value="fit">Fit image</option>
+              </select>
+            </label>
+            <label>
+              Zoom
+              <input id="cropZoom" type="range" min="0.25" max="4" step="0.01" value="1">
+            </label>
+            <p id="cropSourceInfo" class="status-text">Crop source: auto</p>
+          </div>
+        </fieldset>
+        <div class="crop-actions">
+          <button id="centerCrop" class="secondary-button" type="button">Center Image</button>
           <button id="saveCrop" class="primary-button" value="save" type="button">Add Tile</button>
         </div>
-        <p class="status-text">Drag inside the preview to position the image. Transparent pixels are preserved.</p>
       </form>
     </dialog>
 

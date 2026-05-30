@@ -466,23 +466,44 @@ button:focus-visible {
   background-size: 20px 20px;
 }
 
-.crop-controls {
+.crop-tool-group {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) auto auto;
-  align-items: end;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.crop-tool-group legend {
+  padding: 0 6px;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.crop-actions {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: end;
   gap: 12px;
 }
 
 .crop-scale-tools {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  align-items: end;
+  grid-template-columns: minmax(150px, 220px) minmax(180px, 1fr);
+  align-items: center;
   gap: 12px;
+}
+
+.crop-scale-tools .status-text {
+  grid-column: 1 / -1;
 }
 
 .crop-size-tools {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(76px, 1fr)) auto minmax(172px, auto);
   align-items: end;
   gap: 12px;
 }
@@ -536,10 +557,6 @@ button:focus-visible {
 
   .control-panel section {
     gap: 10px;
-  }
-
-  .crop-controls {
-    grid-template-columns: 1fr;
   }
 
   .canvas-toolbar {
@@ -692,8 +709,12 @@ button:focus-visible {
     gap: 8px;
   }
 
-  .crop-size-tools .secondary-button {
+  .crop-size-tools .secondary-button:last-child {
     grid-column: 1 / -1;
+  }
+
+  .crop-actions {
+    grid-template-columns: 1fr 1fr;
   }
 
   .crop-align-tools {
@@ -856,7 +877,7 @@ button:focus-visible {
   }
 
   .crop-panel {
-    gap: 8px;
+    gap: 7px;
     padding: 10px;
   }
 
@@ -874,23 +895,31 @@ button:focus-visible {
     max-height: 180px;
   }
 
-  .crop-controls {
-    grid-template-columns: minmax(140px, 1fr) auto auto;
-    gap: 8px;
-  }
-
   .crop-scale-tools {
     grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
     gap: 8px;
   }
 
   .crop-size-tools {
-    grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(64px, 1fr)) auto minmax(150px, auto);
+    gap: 6px;
   }
 
-  .crop-size-tools .secondary-button {
+  .crop-size-tools .secondary-button:last-child {
     grid-column: auto;
+  }
+
+  .crop-tool-group {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .crop-tool-group legend {
+    font-size: 0.68rem;
+  }
+
+  .crop-actions {
+    gap: 8px;
   }
 
   .crop-align-tools {

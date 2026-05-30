@@ -153,6 +153,40 @@ function createPaddedTilePng(width, height, top, bottom, color) {
   ]);
 }
 
+function createTransparentRectPng(width, height, bounds, color) {
+  const signature = Buffer.from("89504e470d0a1a0a", "hex");
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const stride = 1 + width * 4;
+  const rawPixels = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * stride;
+    rawPixels[rowStart] = 0;
+    for (let x = 0; x < width; x += 1) {
+      if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom) continue;
+      const pixelStart = rowStart + 1 + x * 4;
+      rawPixels[pixelStart] = color[0];
+      rawPixels[pixelStart + 1] = color[1];
+      rawPixels[pixelStart + 2] = color[2];
+      rawPixels[pixelStart + 3] = color[3];
+    }
+  }
+
+  return Buffer.concat([
+    signature,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", zlib.deflateSync(rawPixels)),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
 function readPngSize(buffer) {
   expect(buffer.subarray(0, 8)).toEqual(Buffer.from("89504e470d0a1a0a", "hex"));
   return {
@@ -501,7 +535,7 @@ test("resizes and repositions a custom crop window when importing one PNG", asyn
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
   await page.locator("#cropWidth").fill("64");
   await page.locator("#cropHeight").fill("32");
-  await page.getByRole("button", { name: "Apply Crop Size" }).click();
+  await page.getByRole("button", { name: "Apply Size" }).click();
   await expect(page.locator("#projectStatus")).toHaveText(
     "Crop window set to 64x32. Drag the image to position the crop."
   );
@@ -531,6 +565,52 @@ test("resizes and repositions a custom crop window when importing one PNG", asyn
   expect(inspected.height).toBe(32);
   expect(inspected.sample[2]).toBeGreaterThan(inspected.sample[0]);
   expect(inspected.sample[3]).toBe(255);
+});
+
+test("auto crops visible pixels with optional padding and keeps the result editable", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 2, rows: 2, tileWidth: 64, tileHeight: 32, spriteWidth: 64, spriteHeight: 64 });
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "transparent-box.png",
+    mimeType: "image/png",
+    buffer: createTransparentRectPng(
+      64,
+      64,
+      { left: 10, top: 15, right: 29, bottom: 34 },
+      [0, 0, 255, 255]
+    )
+  });
+
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
+  await page.locator("#cropPadding").fill("3");
+  await page.getByRole("button", { name: "Auto Crop Visible Pixels" }).click();
+  await expect(page.locator("#cropWidth")).toHaveValue("26");
+  await expect(page.locator("#cropHeight")).toHaveValue("26");
+  await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 26x26px (1x locked)");
+  await expect(page.locator("#projectStatus")).toHaveText("Auto crop set to 26x26 with 3px padding.");
+
+  await page.getByRole("button", { name: "Add Tile" }).click();
+  const inspected = await page.locator(".tile-card img").evaluate(async (image) => {
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      paddingSample: [...ctx.getImageData(1, 1, 1, 1).data],
+      visibleSample: [...ctx.getImageData(3, 3, 1, 1).data]
+    };
+  });
+
+  expect(inspected.width).toBe(26);
+  expect(inspected.height).toBe(26);
+  expect(inspected.paddingSample[3]).toBe(0);
+  expect(inspected.visibleSample[2]).toBeGreaterThan(inspected.visibleSample[0]);
+  expect(inspected.visibleSample[3]).toBe(255);
 });
 
 test("exports placed tiles as a Y-then-X sorted packed PNG", async ({ page }) => {

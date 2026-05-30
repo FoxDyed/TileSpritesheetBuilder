@@ -63,7 +63,9 @@ const els = {
   cropCanvas: document.querySelector("#cropCanvas"),
   cropWidth: document.querySelector("#cropWidth"),
   cropHeight: document.querySelector("#cropHeight"),
+  cropPadding: document.querySelector("#cropPadding"),
   applyCropSize: document.querySelector("#applyCropSize"),
+  autoCropVisible: document.querySelector("#autoCropVisible"),
   cropScaleMode: document.querySelector("#cropScaleMode"),
   cropSourceInfo: document.querySelector("#cropSourceInfo"),
   alignTop: document.querySelector("#alignTop"),
@@ -457,6 +459,16 @@ function addTileFromCanvas(canvas, name) {
   });
 }
 
+function imageToCanvas(image) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, 0, 0);
+  return canvas;
+}
+
 function visiblePixelBounds(canvas) {
   const ctx = canvas.getContext("2d");
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -478,6 +490,18 @@ function visiblePixelBounds(canvas) {
 
   if (maxX === -1) return null;
   return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
+function visibleImageBounds(image) {
+  return visiblePixelBounds(imageToCanvas(image));
+}
+
+function paddedBounds(bounds, padding, maxWidth, maxHeight) {
+  const x = Math.max(0, bounds.x - padding);
+  const y = Math.max(0, bounds.y - padding);
+  const right = Math.min(maxWidth, bounds.x + bounds.width + padding);
+  const bottom = Math.min(maxHeight, bounds.y + bounds.height + padding);
+  return { x, y, width: right - x, height: bottom - y };
 }
 
 async function importSpritesheet(file) {
@@ -542,6 +566,7 @@ async function processNextCrop() {
       file,
       image,
       sourceUrl: url,
+      sourceBounds: visibleImageBounds(image),
       outputWidth: state.spriteWidth,
       outputHeight: state.spriteHeight,
       scale: 1,
@@ -557,6 +582,7 @@ async function processNextCrop() {
     els.cropTitle.textContent = file.name;
     els.cropWidth.value = cropState.outputWidth;
     els.cropHeight.value = cropState.outputHeight;
+    els.cropPadding.value = 0;
     setupCropCanvas();
     centerCropImage();
     els.cropDialog.showModal();
@@ -575,30 +601,68 @@ function setupCropCanvas() {
     height = 380;
     width = height * aspect;
   }
-  els.cropCanvas.width = Math.max(180, Math.round(width));
-  els.cropCanvas.height = Math.max(120, Math.round(height));
+  if (width < 180) {
+    width = 180;
+    height = width / aspect;
+  }
+  if (height < 120) {
+    height = 120;
+    width = height * aspect;
+  }
+  els.cropCanvas.width = Math.round(width);
+  els.cropCanvas.height = Math.round(height);
+}
+
+function setCropWindowSize(width, height) {
+  cropState.outputWidth = clampNumber(width, 1, 2048, cropState.outputWidth);
+  cropState.outputHeight = clampNumber(height, 1, 2048, cropState.outputHeight);
+  els.cropWidth.value = cropState.outputWidth;
+  els.cropHeight.value = cropState.outputHeight;
+  setupCropCanvas();
 }
 
 function applyCustomCropSize() {
   if (!cropState) return;
-  cropState.outputWidth = clampNumber(els.cropWidth.value, 8, 2048, cropState.outputWidth);
-  cropState.outputHeight = clampNumber(els.cropHeight.value, 8, 2048, cropState.outputHeight);
-  els.cropWidth.value = cropState.outputWidth;
-  els.cropHeight.value = cropState.outputHeight;
-  setupCropCanvas();
+  setCropWindowSize(els.cropWidth.value, els.cropHeight.value);
   centerCropImage();
   setStatus(`Crop window set to ${cropState.outputWidth}x${cropState.outputHeight}. Drag the image to position the crop.`);
 }
 
-function centerCropImage() {
+function updateCropZoomRange() {
   if (!cropState) return;
   const scaleX = els.cropCanvas.width / cropState.image.width;
   const scaleY = els.cropCanvas.height / cropState.image.height;
+  els.cropZoom.min = String(Math.max(0.05, Math.min(scaleX, scaleY) * 0.5));
+  els.cropZoom.max = String(Math.max(4, cropState.scale * 4));
+}
+
+function autoCropVisiblePixels() {
+  if (!cropState) return;
+  if (!cropState.sourceBounds) {
+    setStatus(`${cropState.file.name} has no visible pixels to crop.`);
+    return;
+  }
+
+  const padding = clampNumber(els.cropPadding.value, 0, 256, 0);
+  els.cropPadding.value = padding;
+  const bounds = paddedBounds(cropState.sourceBounds, padding, cropState.image.width, cropState.image.height);
+  setCropWindowSize(bounds.width, bounds.height);
+  cropState.scaleMode = "1";
+  cropState.scale = cropScaleForMode("1");
+  cropState.offsetX = -bounds.x * cropState.scale;
+  cropState.offsetY = -bounds.y * cropState.scale;
+  updateCropZoomRange();
+  syncCropControls();
+  drawCrop();
+  setStatus(`Auto crop set to ${bounds.width}x${bounds.height} with ${padding}px padding.`);
+}
+
+function centerCropImage() {
+  if (!cropState) return;
   cropState.scale = cropScaleForMode(cropState.scaleMode || "free");
   cropState.offsetX = (els.cropCanvas.width - cropState.image.width * cropState.scale) / 2;
   cropState.offsetY = (els.cropCanvas.height - cropState.image.height * cropState.scale) / 2;
-  els.cropZoom.min = String(Math.max(0.05, Math.min(scaleX, scaleY) * 0.5));
-  els.cropZoom.max = String(Math.max(4, cropState.scale * 4));
+  updateCropZoomRange();
   syncCropControls();
   drawCrop();
 }
@@ -1005,6 +1069,7 @@ els.gridCanvas.addEventListener("click", handleGridClick);
 
 els.cropZoom.addEventListener("input", handleCropZoom);
 els.applyCropSize.addEventListener("click", applyCustomCropSize);
+els.autoCropVisible.addEventListener("click", autoCropVisiblePixels);
 els.cropScaleMode.addEventListener("change", () => setCropScaleMode(els.cropScaleMode.value));
 els.centerCrop.addEventListener("click", centerCropImage);
 els.alignTop.addEventListener("click", () => alignCrop("y", "start"));
