@@ -205,7 +205,8 @@ const pngs = {
 async function openApp(page) {
   await page.goto(appUrl);
   await expect(page).toHaveTitle("Isometric Tile Spritesheet Builder");
-  await expect(page.locator("#gridCanvas")).toBeVisible();
+  await expect(page.locator("#importScreen")).toBeVisible();
+  await expect(page.locator("#gridCanvas")).toBeHidden();
 }
 
 async function selectControlTab(page, name) {
@@ -308,24 +309,32 @@ test("loads the static page and applies custom project settings", async ({ page 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
 });
 
-test("organizes the workflow into import, place, and export tabs", async ({ page }) => {
+test("organizes the workflow into separate import, place, and export screens", async ({ page }) => {
   await openApp(page);
 
   await expect(page.getByRole("tab", { name: "1. Import" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeHidden();
+  await expect(page.locator("#gridCanvas")).toBeHidden();
 
   await addTile(page, "red.png", pngs.red);
   await expect(page.getByRole("tab", { name: "2. Place" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".tile-card", { hasText: "red.png" })).toBeVisible();
+  await expect(page.locator("#gridCanvas")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
+  await clickCell(page, 1, 1);
 
   await selectControlTab(page, "3. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export Map PNG" })).toBeVisible();
+  await expect(page.locator("#gridCanvas")).toBeHidden();
+  await expect(page.locator("#exportTileCount")).toHaveText("1");
+  await expect(page.locator("#exportPlacedCount")).toHaveText("1");
 });
 
 test("zooms the grid viewer and labels non-1:1 preview scale", async ({ page }) => {
   await openApp(page);
+  await selectControlTab(page, "2. Place");
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 100% (1:1)");
   await expect(page.locator("#zoomScale")).not.toHaveClass(/is-scaled/);
 
@@ -390,25 +399,26 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
   await expect(page.getByRole("tab", { name: "3. Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
-  await expect(page.locator("#gridCanvas")).toBeVisible();
+  await expect(page.locator("#gridCanvas")).toBeHidden();
 
   const layout = await page.evaluate(() => ({
     viewportWidth: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     headerHeight: document.querySelector(".app-header").getBoundingClientRect().height,
-    controlTop: document.querySelector(".control-panel").getBoundingClientRect().top,
-    toolbarHeight: document.querySelector(".canvas-toolbar").getBoundingClientRect().height
+    screenTop: document.querySelector("#importScreen").getBoundingClientRect().top,
+    navHeight: document.querySelector(".workflow-nav").getBoundingClientRect().height
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   expect(layout.headerHeight).toBeLessThan(120);
-  expect(layout.controlTop).toBeGreaterThanOrEqual(0);
-  expect(layout.toolbarHeight).toBeLessThan(96);
+  expect(layout.screenTop).toBeGreaterThanOrEqual(0);
+  expect(layout.navHeight).toBeLessThan(120);
 
   await selectControlTab(page, "3. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await selectControlTab(page, "1. Import");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
   await addTile(page, "red.png", pngs.red);
+  await expect(page.locator("#gridCanvas")).toBeVisible();
   await clickCell(page, 1, 1);
   await expect(page.locator("#placedCount")).toHaveText("1");
 
@@ -423,31 +433,37 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
   await expect(page.getByRole("tab", { name: "3. Export" })).toBeVisible();
-  await expect(page.locator("#gridCanvas")).toBeVisible();
+  await expect(page.locator("#gridCanvas")).toBeHidden();
 
   const layout = await page.evaluate(() => ({
     viewportWidth: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     headerHeight: document.querySelector(".app-header").getBoundingClientRect().height,
-    panelWidth: document.querySelector(".control-panel").getBoundingClientRect().width,
-    panelHeight: document.querySelector(".control-panel").getBoundingClientRect().height,
-    toolbarHeight: document.querySelector(".canvas-toolbar").getBoundingClientRect().height,
-    workspaceLeft: document.querySelector(".workspace").getBoundingClientRect().left,
-    canvasTop: document.querySelector("#gridCanvas").getBoundingClientRect().top
+    navHeight: document.querySelector(".workflow-nav").getBoundingClientRect().height,
+    screenTop: document.querySelector("#importScreen").getBoundingClientRect().top
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   expect(layout.headerHeight).toBeLessThan(64);
-  expect(layout.panelWidth).toBeLessThan(300);
-  expect(layout.panelHeight).toBeLessThanOrEqual(335);
-  expect(layout.toolbarHeight).toBeLessThan(48);
-  expect(layout.workspaceLeft).toBeGreaterThan(layout.panelWidth - 1);
-  expect(layout.canvasTop).toBeLessThan(120);
+  expect(layout.navHeight).toBeLessThan(60);
+  expect(layout.screenTop).toBeGreaterThanOrEqual(0);
 
   await selectControlTab(page, "3. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await selectControlTab(page, "1. Import");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
   await addTile(page, "red.png", pngs.red);
+  const placementLayout = await page.evaluate(() => ({
+    panelWidth: document.querySelector(".control-panel").getBoundingClientRect().width,
+    panelHeight: document.querySelector(".control-panel").getBoundingClientRect().height,
+    toolbarHeight: document.querySelector(".canvas-toolbar").getBoundingClientRect().height,
+    workspaceLeft: document.querySelector(".workspace").getBoundingClientRect().left,
+    canvasTop: document.querySelector("#gridCanvas").getBoundingClientRect().top
+  }));
+  expect(placementLayout.panelWidth).toBeLessThan(300);
+  expect(placementLayout.panelHeight).toBeLessThanOrEqual(335);
+  expect(placementLayout.toolbarHeight).toBeLessThan(48);
+  expect(placementLayout.workspaceLeft).toBeGreaterThan(placementLayout.panelWidth - 1);
+  expect(placementLayout.canvasTop).toBeLessThan(165);
   await clickCell(page, 1, 1);
   await expect(page.locator("#placedCount")).toHaveText("1");
 });
@@ -525,7 +541,7 @@ test("drop mode moves placed tiles only into empty grid cells", async ({ page })
   expect(inspected.second[2]).toBeGreaterThan(inspected.second[0]);
 });
 
-test("locks crop source scale and aligns to the bottom half of a tall PNG", async ({ page }) => {
+test("locks crop source scale and nudges to the bottom half of a tall PNG", async ({ page }) => {
   await openApp(page);
   await setProject(page, { cols: 2, rows: 2, tileWidth: 128, tileHeight: 128, exportCols: 1 });
 
@@ -538,7 +554,14 @@ test("locks crop source scale and aligns to the bottom half of a tall PNG", asyn
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
   await page.locator("#cropScaleMode").selectOption("1");
   await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 128x128px (1x locked)");
-  await page.getByRole("button", { name: "Bottom" }).click();
+  await expect(page.locator("#cropNudgePixels")).toHaveValue("1");
+  await expect(page.getByRole("button", { name: "Up", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Down", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Left", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Right", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Center Image" })).toHaveCount(0);
+  await page.locator("#cropNudgePixels").fill("64");
+  await page.getByRole("button", { name: "Up", exact: true }).click();
   await page.getByRole("button", { name: "Add Tile" }).click();
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", false);
 
@@ -578,7 +601,8 @@ test("resizes and repositions a custom crop window when importing one PNG", asyn
 
   await page.locator("#cropScaleMode").selectOption("1");
   await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 64x32px (1x locked)");
-  await page.getByRole("button", { name: "Bottom" }).click();
+  await page.locator("#cropNudgePixels").fill("112");
+  await page.getByRole("button", { name: "Up", exact: true }).click();
   await page.getByRole("button", { name: "Add Tile" }).click();
 
   const inspected = await page.locator(".tile-card img").evaluate(async (image) => {

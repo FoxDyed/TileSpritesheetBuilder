@@ -54,6 +54,12 @@ const els = {
   layerVisible: document.querySelector("#layerVisible"),
   placedCount: document.querySelector("#placedCount"),
   selectedTileName: document.querySelector("#selectedTileName"),
+  importedTileCount: document.querySelector("#importedTileCount"),
+  importGridSize: document.querySelector("#importGridSize"),
+  exportTileCount: document.querySelector("#exportTileCount"),
+  exportPlacedCount: document.querySelector("#exportPlacedCount"),
+  exportLayerCount: document.querySelector("#exportLayerCount"),
+  exportGridSize: document.querySelector("#exportGridSize"),
   hoverCell: document.querySelector("#hoverCell"),
   zoomOut: document.querySelector("#zoomOut"),
   zoomIn: document.querySelector("#zoomIn"),
@@ -70,14 +76,12 @@ const els = {
   autoCropVisible: document.querySelector("#autoCropVisible"),
   cropScaleMode: document.querySelector("#cropScaleMode"),
   cropSourceInfo: document.querySelector("#cropSourceInfo"),
-  alignTop: document.querySelector("#alignTop"),
-  alignMiddle: document.querySelector("#alignMiddle"),
-  alignBottom: document.querySelector("#alignBottom"),
-  alignLeft: document.querySelector("#alignLeft"),
-  alignCenterX: document.querySelector("#alignCenterX"),
-  alignRight: document.querySelector("#alignRight"),
+  cropNudgePixels: document.querySelector("#cropNudgePixels"),
+  nudgeUp: document.querySelector("#nudgeUp"),
+  nudgeDown: document.querySelector("#nudgeDown"),
+  nudgeLeft: document.querySelector("#nudgeLeft"),
+  nudgeRight: document.querySelector("#nudgeRight"),
   cropZoom: document.querySelector("#cropZoom"),
-  centerCrop: document.querySelector("#centerCrop"),
   saveCrop: document.querySelector("#saveCrop"),
   skipCrop: document.querySelector("#skipCrop")
 };
@@ -114,6 +118,7 @@ function activateControlTab(tabId, focusTab = false) {
     panel.hidden = panel.id !== activeTab.getAttribute("aria-controls");
   }
 
+  updateStats();
   if (focusTab) activeTab.focus();
 }
 
@@ -411,8 +416,16 @@ function updateToolButtons() {
 }
 
 function updateStats() {
-  els.placedCount.textContent = String(placedTileCount());
+  const placements = placedTileCount();
+  const gridSize = `${state.cols} x ${state.rows}`;
+  els.placedCount.textContent = String(placements);
   els.selectedTileName.textContent = selectedTileLabel();
+  els.importedTileCount.textContent = String(state.tiles.length);
+  els.importGridSize.textContent = gridSize;
+  els.exportTileCount.textContent = String(state.tiles.length);
+  els.exportPlacedCount.textContent = String(placements);
+  els.exportLayerCount.textContent = String(state.layers.length);
+  els.exportGridSize.textContent = gridSize;
 }
 
 function viewerScaleLabel() {
@@ -753,20 +766,12 @@ function setCropScaleMode(mode) {
   drawCrop();
 }
 
-function alignCrop(axis, position) {
+function nudgeCrop(deltaX, deltaY) {
   if (!cropState) return;
-  const drawnWidth = cropState.image.width * cropState.scale;
-  const drawnHeight = cropState.image.height * cropState.scale;
-  if (axis === "x") {
-    if (position === "start") cropState.offsetX = 0;
-    if (position === "center") cropState.offsetX = (els.cropCanvas.width - drawnWidth) / 2;
-    if (position === "end") cropState.offsetX = els.cropCanvas.width - drawnWidth;
-  }
-  if (axis === "y") {
-    if (position === "start") cropState.offsetY = 0;
-    if (position === "center") cropState.offsetY = (els.cropCanvas.height - drawnHeight) / 2;
-    if (position === "end") cropState.offsetY = els.cropCanvas.height - drawnHeight;
-  }
+  const pixels = clampNumber(els.cropNudgePixels.value, 1, 2048, 1);
+  els.cropNudgePixels.value = pixels;
+  cropState.offsetX += deltaX * pixels * cropState.scale;
+  cropState.offsetY += deltaY * pixels * cropState.scale;
   drawCrop();
 }
 
@@ -1119,13 +1124,10 @@ els.cropZoom.addEventListener("input", handleCropZoom);
 els.applyCropSize.addEventListener("click", applyCustomCropSize);
 els.autoCropVisible.addEventListener("click", autoCropVisiblePixels);
 els.cropScaleMode.addEventListener("change", () => setCropScaleMode(els.cropScaleMode.value));
-els.centerCrop.addEventListener("click", centerCropImage);
-els.alignTop.addEventListener("click", () => alignCrop("y", "start"));
-els.alignMiddle.addEventListener("click", () => alignCrop("y", "center"));
-els.alignBottom.addEventListener("click", () => alignCrop("y", "end"));
-els.alignLeft.addEventListener("click", () => alignCrop("x", "start"));
-els.alignCenterX.addEventListener("click", () => alignCrop("x", "center"));
-els.alignRight.addEventListener("click", () => alignCrop("x", "end"));
+els.nudgeUp.addEventListener("click", () => nudgeCrop(0, -1));
+els.nudgeDown.addEventListener("click", () => nudgeCrop(0, 1));
+els.nudgeLeft.addEventListener("click", () => nudgeCrop(-1, 0));
+els.nudgeRight.addEventListener("click", () => nudgeCrop(1, 0));
 els.saveCrop.addEventListener("click", saveCurrentCrop);
 els.skipCrop.addEventListener("click", skipCurrentCrop);
 els.cropCanvas.addEventListener("pointerdown", (event) => {

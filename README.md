@@ -7,10 +7,11 @@ Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
 
 ## Features
 
+- Work through separate Import, Place, and Export screens while project data stays shared.
 - Upload one or more PNG files.
 - Crop each incoming PNG with a custom, draggable crop window.
 - Auto-crop transparent margins with optional padding while keeping the result editable.
-- Lock crop source scale and align/pan tall or wide source images before
+- Lock crop source scale and nudge or drag tall or wide source images before
   cropping.
 - Import sprite sheets as reusable tile-library entries.
 - Paint layered isometric maps and move placed tiles between empty grid cells.

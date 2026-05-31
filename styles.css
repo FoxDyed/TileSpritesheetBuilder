@@ -105,8 +105,81 @@ input {
 
 .app-shell {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.workflow-nav {
+  display: grid;
+  grid-template-columns: minmax(300px, 480px) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.workflow-status {
+  min-width: 0;
+  text-align: right;
+}
+
+.app-screen[hidden] {
+  display: none;
+}
+
+.import-screen,
+.export-screen {
+  min-height: 0;
+  overflow: auto;
+  padding: 30px;
+}
+
+.place-screen {
+  display: grid;
   grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   min-height: 0;
+}
+
+.screen-heading {
+  max-width: 760px;
+  margin: 0 auto 22px;
+}
+
+.screen-heading h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.screen-heading p:last-child {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.import-layout,
+.export-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  width: min(100%, 980px);
+  margin: 0 auto;
+}
+
+.feature-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.feature-panel h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .control-panel {
@@ -119,11 +192,6 @@ input {
   padding: 20px;
   border-right: 1px solid var(--line);
   background: var(--panel);
-}
-
-.control-panel section {
-  display: grid;
-  gap: 14px;
 }
 
 .control-tabs {
@@ -158,10 +226,6 @@ input {
   background: var(--panel);
 }
 
-.control-tab-panel[hidden] {
-  display: none;
-}
-
 .control-panel h2,
 .control-panel h3 {
   margin: 0;
@@ -179,11 +243,6 @@ input {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.45;
-}
-
-.control-status {
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
 }
 
 .field-grid {
@@ -564,13 +623,20 @@ button:focus-visible {
   gap: 12px;
 }
 
-.crop-align-tools {
+.crop-nudge-tools {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  align-items: end;
   gap: 8px;
 }
 
-.crop-align-tools .secondary-button {
+.crop-nudge-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crop-nudge-buttons .secondary-button {
   padding: 7px 8px;
 }
 
@@ -598,8 +664,31 @@ button:focus-visible {
   }
 
   .app-shell {
-    grid-template-columns: 1fr;
     min-height: auto;
+  }
+
+  .workflow-nav {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .workflow-status {
+    text-align: left;
+  }
+
+  .import-screen,
+  .export-screen {
+    padding: 20px 14px;
+  }
+
+  .import-layout,
+  .export-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .place-screen {
+    grid-template-columns: 1fr;
   }
 
   .control-panel {
@@ -662,6 +751,20 @@ button:focus-visible {
 
   .control-panel {
     padding: 12px;
+  }
+
+  .workflow-nav {
+    padding: 8px 12px;
+  }
+
+  .import-screen,
+  .export-screen {
+    padding: 16px 12px;
+  }
+
+  .feature-panel {
+    gap: 12px;
+    padding: 14px;
   }
 
   .control-panel h2 {
@@ -778,8 +881,8 @@ button:focus-visible {
     grid-template-columns: 1fr 1fr;
   }
 
-  .crop-align-tools {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .crop-nudge-tools {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -808,13 +911,46 @@ button:focus-visible {
   }
 
   .app-shell {
-    grid-template-columns: minmax(232px, 280px) minmax(0, 1fr);
     min-height: calc(100vh - 55px);
+  }
+
+  .workflow-nav {
+    grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    gap: 10px;
+    padding: 6px 10px;
+  }
+
+  .place-screen {
+    grid-template-columns: minmax(232px, 280px) minmax(0, 1fr);
+    min-height: calc(100vh - 95px);
+  }
+
+  .import-screen,
+  .export-screen {
+    padding: 14px;
+  }
+
+  .screen-heading {
+    margin-bottom: 12px;
+  }
+
+  .screen-heading h2 {
+    font-size: 1.1rem;
+  }
+
+  .screen-heading p:last-child {
+    margin-top: 4px;
+    font-size: 0.76rem;
+  }
+
+  .feature-panel {
+    gap: 8px;
+    padding: 12px;
   }
 
   .control-panel {
     gap: 8px;
-    max-height: calc(100vh - 55px);
+    max-height: calc(100vh - 95px);
     overflow: auto;
     padding: 10px;
     border-right: 1px solid var(--line);
@@ -899,7 +1035,7 @@ button:focus-visible {
   }
 
   .workspace {
-    min-height: calc(100vh - 55px);
+    min-height: calc(100vh - 95px);
   }
 
   .canvas-toolbar {
@@ -993,12 +1129,16 @@ button:focus-visible {
     gap: 8px;
   }
 
-  .crop-align-tools {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+  .crop-nudge-tools {
+    grid-template-columns: minmax(92px, 128px) minmax(0, 1fr);
     gap: 5px;
   }
 
-  .crop-align-tools .secondary-button {
+  .crop-nudge-buttons {
+    gap: 5px;
+  }
+
+  .crop-nudge-buttons .secondary-button {
     padding: 5px 6px;
   }
 }
@@ -1013,12 +1153,24 @@ button:focus-visible {
   }
 
   .app-shell {
-    grid-template-columns: minmax(210px, 248px) minmax(0, 1fr);
     min-height: calc(100vh - 45px);
   }
 
+  .workflow-nav {
+    padding: 4px 8px;
+  }
+
+  .workflow-status {
+    display: none;
+  }
+
+  .place-screen {
+    grid-template-columns: minmax(210px, 248px) minmax(0, 1fr);
+    min-height: calc(100vh - 73px);
+  }
+
   .control-panel {
-    max-height: calc(100vh - 45px);
+    max-height: calc(100vh - 73px);
     padding: 8px;
   }
 

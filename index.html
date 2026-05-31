@@ -18,63 +18,92 @@
     </header>
 
     <main class="app-shell">
-      <aside class="control-panel" aria-label="Project controls">
-        <div class="control-tabs" role="tablist" aria-label="Project control sections">
-          <button id="importTab" class="control-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="importPanel">1. Import</button>
-          <button id="placeTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="placePanel" tabindex="-1">2. Place</button>
-          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportPanel" tabindex="-1">3. Export</button>
+      <nav class="workflow-nav" aria-label="Tile builder workflow">
+        <div class="control-tabs" role="tablist" aria-label="Workflow screens">
+          <button id="importTab" class="control-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="importScreen">1. Import</button>
+          <button id="placeTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="placeScreen" tabindex="-1">2. Place</button>
+          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportScreen" tabindex="-1">3. Export</button>
         </div>
+        <p id="projectStatus" class="status-text workflow-status" aria-live="polite"></p>
+      </nav>
 
-        <section id="importPanel" class="control-tab-panel" role="tabpanel" aria-labelledby="importTab">
+      <section id="importScreen" class="app-screen import-screen" role="tabpanel" aria-labelledby="importTab">
+        <div class="screen-heading">
+          <p class="eyebrow">Step 1</p>
           <h2>Import Sprites</h2>
-          <p class="panel-description">Set up the grid, then add individual PNGs or slice an existing sprite sheet.</p>
-          <div class="field-grid">
-            <label>
-              Columns
-              <input id="gridCols" type="number" min="1" max="64" value="8">
-            </label>
-            <label>
-              Rows
-              <input id="gridRows" type="number" min="1" max="64" value="8">
-            </label>
-            <label>
-              Grid width
-              <input id="tileWidth" type="number" min="8" max="1024" value="128">
-            </label>
-            <label>
-              Grid height
-              <input id="tileHeight" type="number" min="8" max="1024" value="64">
-            </label>
-            <label>
-              Sprite width
-              <input id="spriteWidth" type="number" min="8" max="2048" value="128">
-            </label>
-            <label>
-              Sprite height
-              <input id="spriteHeight" type="number" min="8" max="2048" value="128">
-            </label>
-          </div>
-          <button id="applySettings" class="secondary-button" type="button">Apply Settings</button>
-          <label class="file-picker">
-            <span>Add PNGs</span>
-            <input id="fileInput" type="file" accept="image/png" multiple>
-          </label>
-          <label class="file-picker">
-            <span>Import Sprite Sheet</span>
-            <input id="sheetFileInput" type="file" accept="image/png">
-          </label>
-        </section>
+          <p>Configure the shared project dimensions, then load individual PNGs or slice a sprite sheet into reusable palette entries.</p>
+        </div>
+        <div class="import-layout">
+          <section class="feature-panel">
+            <h3>Project Setup</h3>
+            <p class="panel-description">These dimensions are shared with placement and export.</p>
+            <div class="field-grid">
+              <label>
+                Columns
+                <input id="gridCols" type="number" min="1" max="64" value="8">
+              </label>
+              <label>
+                Rows
+                <input id="gridRows" type="number" min="1" max="64" value="8">
+              </label>
+              <label>
+                Grid width
+                <input id="tileWidth" type="number" min="8" max="1024" value="128">
+              </label>
+              <label>
+                Grid height
+                <input id="tileHeight" type="number" min="8" max="1024" value="64">
+              </label>
+              <label>
+                Sprite width
+                <input id="spriteWidth" type="number" min="8" max="2048" value="128">
+              </label>
+              <label>
+                Sprite height
+                <input id="spriteHeight" type="number" min="8" max="2048" value="128">
+              </label>
+            </div>
+            <button id="applySettings" class="secondary-button" type="button">Apply Settings</button>
+          </section>
 
-        <section id="placePanel" class="control-tab-panel" role="tabpanel" aria-labelledby="placeTab" hidden>
-          <h2>Place Sprites</h2>
-          <p class="panel-description">Choose a palette sprite, then paint, move, or erase it on the isometric grid.</p>
+          <section class="feature-panel">
+            <h3>Sprite Sources</h3>
+            <p class="panel-description">Individual files open the crop editor. Sprite sheets are sliced using the configured sprite size.</p>
+            <label class="file-picker">
+              <span>Add PNGs</span>
+              <input id="fileInput" type="file" accept="image/png" multiple>
+            </label>
+            <label class="file-picker">
+              <span>Import Sprite Sheet</span>
+              <input id="sheetFileInput" type="file" accept="image/png">
+            </label>
+            <dl class="stats">
+              <div>
+                <dt>Imported sprites</dt>
+                <dd id="importedTileCount">0</dd>
+              </div>
+              <div>
+                <dt>Project grid</dt>
+                <dd id="importGridSize">8 x 8</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      </section>
+
+      <section id="placeScreen" class="app-screen place-screen" role="tabpanel" aria-labelledby="placeTab" hidden>
+        <aside class="control-panel" aria-label="Placement controls">
+          <div>
+            <p class="eyebrow">Step 2</p>
+            <h2>Place Sprites</h2>
+            <p class="panel-description">Choose a palette sprite, then paint, move, or erase it on the isometric grid.</p>
+          </div>
           <div class="tool-row" role="group" aria-label="Grid tools">
             <button id="paintTool" class="tool-button is-active" type="button">Paint</button>
             <button id="dropTool" class="tool-button" type="button">Move</button>
             <button id="eraseTool" class="tool-button" type="button">Erase</button>
           </div>
           <div id="palette" class="palette" aria-label="Tile palette"></div>
-
           <h3>Layers</h3>
           <label>
             Active layer
@@ -100,37 +129,66 @@
               <dd id="selectedTileName">None</dd>
             </div>
           </dl>
-        </section>
+        </aside>
 
-        <section id="exportPanel" class="control-tab-panel" role="tabpanel" aria-labelledby="exportTab" hidden>
+        <section class="workspace" aria-label="Tile grid workspace">
+          <div class="canvas-toolbar">
+            <div class="viewer-meta">
+              <span id="hoverCell">Cell: none</span>
+              <span>Y sort export: row first, then column</span>
+            </div>
+            <div class="zoom-controls" aria-label="Grid viewer zoom controls">
+              <button id="zoomOut" class="zoom-button" type="button" aria-label="Zoom out">-</button>
+              <span id="zoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
+              <button id="zoomIn" class="zoom-button" type="button" aria-label="Zoom in">+</button>
+              <button id="zoomReset" class="secondary-button compact-button" type="button">1:1</button>
+            </div>
+          </div>
+          <div class="canvas-scroll">
+            <canvas id="gridCanvas" width="900" height="620" aria-label="Isometric tile placement grid"></canvas>
+          </div>
+        </section>
+      </section>
+
+      <section id="exportScreen" class="app-screen export-screen" role="tabpanel" aria-labelledby="exportTab" hidden>
+        <div class="screen-heading">
+          <p class="eyebrow">Step 3</p>
           <h2>Export</h2>
-          <p class="panel-description">Download a packed sprite sheet for Godot or a rendered map preview.</p>
-          <label>
-            Sprite sheet columns
-            <input id="exportCols" type="number" min="1" max="64" value="8">
-          </label>
-          <button id="exportButton" class="primary-button" type="button">Export PNG</button>
-          <button id="exportMapButton" class="secondary-button" type="button">Export Map PNG</button>
-        </section>
-
-        <p id="projectStatus" class="status-text control-status" aria-live="polite"></p>
-      </aside>
-
-      <section class="workspace" aria-label="Tile grid workspace">
-        <div class="canvas-toolbar">
-          <div class="viewer-meta">
-            <span id="hoverCell">Cell: none</span>
-            <span>Y sort export: row first, then column</span>
-          </div>
-          <div class="zoom-controls" aria-label="Grid viewer zoom controls">
-            <button id="zoomOut" class="zoom-button" type="button" aria-label="Zoom out">-</button>
-            <span id="zoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
-            <button id="zoomIn" class="zoom-button" type="button" aria-label="Zoom in">+</button>
-            <button id="zoomReset" class="secondary-button compact-button" type="button">1:1</button>
-          </div>
+          <p>Review the shared project state and download either a Godot-ready packed sprite sheet or a rendered map PNG.</p>
         </div>
-        <div class="canvas-scroll">
-          <canvas id="gridCanvas" width="900" height="620" aria-label="Isometric tile placement grid"></canvas>
+        <div class="export-layout">
+          <section class="feature-panel">
+            <h3>Export Readiness</h3>
+            <p class="panel-description">This summary updates as sprites are imported and placed.</p>
+            <dl class="stats export-stats">
+              <div>
+                <dt>Imported sprites</dt>
+                <dd id="exportTileCount">0</dd>
+              </div>
+              <div>
+                <dt>Placed sprites</dt>
+                <dd id="exportPlacedCount">0</dd>
+              </div>
+              <div>
+                <dt>Layers</dt>
+                <dd id="exportLayerCount">1</dd>
+              </div>
+              <div>
+                <dt>Grid</dt>
+                <dd id="exportGridSize">8 x 8</dd>
+              </div>
+            </dl>
+          </section>
+          <section class="feature-panel">
+            <h3>Downloads</h3>
+            <p class="panel-description">Packed sheets use Y-then-X placement order. Map PNGs render visible layers.</p>
+            <label>
+              Sprite sheet columns
+              <input id="exportCols" type="number" min="1" max="64" value="8">
+            </label>
+            <button id="exportButton" class="primary-button" type="button">Export PNG</button>
+            <button id="exportMapButton" class="secondary-button" type="button">Export Map PNG</button>
+          </section>
         </div>
       </section>
     </main>
@@ -166,13 +224,17 @@
         </fieldset>
         <fieldset class="crop-tool-group">
           <legend>Position</legend>
-          <div class="crop-align-tools" aria-label="Crop alignment tools">
-            <button id="alignTop" class="secondary-button" type="button">Top</button>
-            <button id="alignMiddle" class="secondary-button" type="button">Middle</button>
-            <button id="alignBottom" class="secondary-button" type="button">Bottom</button>
-            <button id="alignLeft" class="secondary-button" type="button">Left</button>
-            <button id="alignCenterX" class="secondary-button" type="button">Center X</button>
-            <button id="alignRight" class="secondary-button" type="button">Right</button>
+          <div class="crop-nudge-tools" aria-label="Image nudge tools">
+            <label>
+              Nudge pixels
+              <input id="cropNudgePixels" type="number" min="1" max="2048" value="1">
+            </label>
+            <div class="crop-nudge-buttons" role="group" aria-label="Nudge image">
+              <button id="nudgeUp" class="secondary-button" type="button">Up</button>
+              <button id="nudgeDown" class="secondary-button" type="button">Down</button>
+              <button id="nudgeLeft" class="secondary-button" type="button">Left</button>
+              <button id="nudgeRight" class="secondary-button" type="button">Right</button>
+            </div>
           </div>
         </fieldset>
         <fieldset class="crop-tool-group">
@@ -196,7 +258,6 @@
           </div>
         </fieldset>
         <div class="crop-actions">
-          <button id="centerCrop" class="secondary-button" type="button">Center Image</button>
           <button id="saveCrop" class="primary-button" value="save" type="button">Add Tile</button>
         </div>
       </form>
