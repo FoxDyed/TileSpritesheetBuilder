@@ -112,7 +112,7 @@ input {
 .control-panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -126,8 +126,64 @@ input {
   gap: 14px;
 }
 
-.control-panel h2 {
+.control-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+}
+
+.control-tab {
+  min-width: 0;
+  padding: 8px 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.control-tab:hover {
+  color: var(--accent-strong);
+}
+
+.control-tab.is-active {
+  color: var(--accent-strong);
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.control-tab-panel[hidden] {
+  display: none;
+}
+
+.control-panel h2,
+.control-panel h3 {
+  margin: 0;
   font-size: 1rem;
+}
+
+.control-panel h3 {
+  padding-top: 4px;
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+}
+
+.panel-description {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.control-status {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
 .field-grid {
@@ -547,7 +603,7 @@ button:focus-visible {
   }
 
   .control-panel {
-    gap: 12px;
+    gap: 10px;
     max-height: none;
     overflow: visible;
     padding: 14px;
@@ -610,6 +666,11 @@ button:focus-visible {
 
   .control-panel h2 {
     font-size: 0.92rem;
+  }
+
+  .control-tab {
+    padding: 7px 2px;
+    font-size: 0.7rem;
   }
 
   .field-grid {
@@ -762,6 +823,16 @@ button:focus-visible {
 
   .control-panel section {
     gap: 8px;
+  }
+
+  .control-tabs {
+    gap: 3px;
+    padding: 3px;
+  }
+
+  .control-tab {
+    padding: 5px 2px;
+    font-size: 0.64rem;
   }
 
   .control-panel h2 {

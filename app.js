@@ -27,6 +27,8 @@ const state = {
 const viewerZoomLevels = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 const els = {
+  controlTabs: [...document.querySelectorAll('[role="tab"]')],
+  controlTabPanels: [...document.querySelectorAll('[role="tabpanel"]')],
   gridCols: document.querySelector("#gridCols"),
   gridRows: document.querySelector("#gridRows"),
   tileWidth: document.querySelector("#tileWidth"),
@@ -90,6 +92,44 @@ function clampNumber(value, min, max, fallback) {
   const number = Number.parseInt(value, 10);
   if (Number.isNaN(number)) return fallback;
   return Math.min(max, Math.max(min, number));
+}
+
+function updateExportColumns() {
+  state.exportCols = clampNumber(els.exportCols.value, 1, 64, state.exportCols);
+  els.exportCols.value = state.exportCols;
+}
+
+function activateControlTab(tabId, focusTab = false) {
+  const activeTab = els.controlTabs.find((tab) => tab.id === tabId);
+  if (!activeTab) return;
+
+  for (const tab of els.controlTabs) {
+    const isActive = tab === activeTab;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+  }
+
+  for (const panel of els.controlTabPanels) {
+    panel.hidden = panel.id !== activeTab.getAttribute("aria-controls");
+  }
+
+  if (focusTab) activeTab.focus();
+}
+
+function handleControlTabKeydown(event) {
+  const currentIndex = els.controlTabs.indexOf(event.currentTarget);
+  if (currentIndex < 0) return;
+
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % els.controlTabs.length;
+  if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + els.controlTabs.length) % els.controlTabs.length;
+  if (event.key === "Home") nextIndex = 0;
+  if (event.key === "End") nextIndex = els.controlTabs.length - 1;
+  if (nextIndex === currentIndex) return;
+
+  event.preventDefault();
+  activateControlTab(els.controlTabs[nextIndex].id, true);
 }
 
 function placementKey(x, y) {
@@ -547,6 +587,7 @@ async function importSpritesheet(file) {
     renderPalette();
     updateStats();
     setStatus(`Imported ${imported} tiles from ${file.name} using ${state.spriteWidth}x${state.spriteHeight} sprite cells.`);
+    if (imported > 0) activateControlTab("placeTab");
   } catch (error) {
     console.error(error);
     setStatus(`Could not import ${file.name}.`);
@@ -782,6 +823,7 @@ function saveCurrentCrop() {
     renderPalette();
     updateStats();
     setStatus(`Added ${tile.name} at ${output.width}x${output.height}.`);
+    activateControlTab("placeTab");
     processNextCrop();
   };
   image.src = url;
@@ -938,6 +980,7 @@ function setActiveLayerVisibility(visible) {
 }
 
 function exportSpritesheet() {
+  updateExportColumns();
   const placements = allPlacementsSorted();
 
   if (placements.length === 0) {
@@ -1024,6 +1067,10 @@ function cropPointer(event) {
   };
 }
 
+for (const tab of els.controlTabs) {
+  tab.addEventListener("click", () => activateControlTab(tab.id));
+  tab.addEventListener("keydown", handleControlTabKeydown);
+}
 els.applySettings.addEventListener("click", applySettings);
 els.fileInput.addEventListener("change", (event) => {
   enqueueFiles(event.target.files);
@@ -1051,6 +1098,7 @@ els.themeToggle.addEventListener("click", () => {
 });
 els.exportButton.addEventListener("click", exportSpritesheet);
 els.exportMapButton.addEventListener("click", exportMapImage);
+els.exportCols.addEventListener("change", updateExportColumns);
 els.layerSelect.addEventListener("change", () => setActiveLayer(els.layerSelect.value));
 els.addLayer.addEventListener("click", addLayer);
 els.deleteLayer.addEventListener("click", deleteActiveLayer);

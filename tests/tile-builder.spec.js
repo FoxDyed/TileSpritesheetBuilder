@@ -208,6 +208,15 @@ async function openApp(page) {
   await expect(page.locator("#gridCanvas")).toBeVisible();
 }
 
+async function selectControlTab(page, name) {
+  await page.getByRole("tab", { name }).click();
+}
+
+async function clickExport(page, name) {
+  await selectControlTab(page, "3. Export");
+  await page.getByRole("button", { name }).click();
+}
+
 async function setProject(page, {
   cols = 4,
   rows = 3,
@@ -223,8 +232,11 @@ async function setProject(page, {
   await page.locator("#tileHeight").fill(String(tileHeight));
   await page.locator("#spriteWidth").fill(String(spriteWidth));
   await page.locator("#spriteHeight").fill(String(spriteHeight));
-  await page.locator("#exportCols").fill(String(exportCols));
   await page.getByRole("button", { name: "Apply Settings" }).click();
+  await selectControlTab(page, "3. Export");
+  await page.locator("#exportCols").fill(String(exportCols));
+  await page.locator("#exportCols").blur();
+  await selectControlTab(page, "1. Import");
 }
 
 async function addTile(page, name, buffer) {
@@ -296,6 +308,22 @@ test("loads the static page and applies custom project settings", async ({ page 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
 });
 
+test("organizes the workflow into import, place, and export tabs", async ({ page }) => {
+  await openApp(page);
+
+  await expect(page.getByRole("tab", { name: "1. Import" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export PNG" })).toBeHidden();
+
+  await addTile(page, "red.png", pngs.red);
+  await expect(page.getByRole("tab", { name: "2. Place" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".tile-card", { hasText: "red.png" })).toBeVisible();
+
+  await selectControlTab(page, "3. Export");
+  await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export Map PNG" })).toBeVisible();
+});
+
 test("zooms the grid viewer and labels non-1:1 preview scale", async ({ page }) => {
   await openApp(page);
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 100% (1:1)");
@@ -336,7 +364,7 @@ test("toggles dark mode and persists the display preference", async ({ page }) =
   await setProject(page);
   await addTile(page, "red.png", pngs.red);
   await clickCell(page, 1, 0);
-  await page.getByRole("button", { name: "Export PNG" }).click();
+  await clickExport(page, "Export PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
@@ -360,7 +388,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "3. Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeVisible();
 
@@ -376,6 +404,9 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
   expect(layout.controlTop).toBeGreaterThanOrEqual(0);
   expect(layout.toolbarHeight).toBeLessThan(96);
 
+  await selectControlTab(page, "3. Export");
+  await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
+  await selectControlTab(page, "1. Import");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
   await addTile(page, "red.png", pngs.red);
   await clickCell(page, 1, 1);
@@ -391,7 +422,7 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "3. Export" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeVisible();
 
   const layout = await page.evaluate(() => ({
@@ -412,6 +443,9 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
   expect(layout.workspaceLeft).toBeGreaterThan(layout.panelWidth - 1);
   expect(layout.canvasTop).toBeLessThan(120);
 
+  await selectControlTab(page, "3. Export");
+  await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
+  await selectControlTab(page, "1. Import");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
   await addTile(page, "red.png", pngs.red);
   await clickCell(page, 1, 1);
@@ -469,7 +503,7 @@ test("drop mode moves placed tiles only into empty grid cells", async ({ page })
   await expect(page.locator("#selectedTileName")).toHaveText("blue.png");
   await expect(page.evaluate(() => window.__tileBuilderDebug.getState().pickedPlacement)).resolves.toBeNull();
 
-  await page.getByRole("button", { name: "Export PNG" }).click();
+  await clickExport(page, "Export PNG");
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
   const inspected = await page.evaluate(async (href) => {
@@ -624,7 +658,7 @@ test("exports placed tiles as a Y-then-X sorted packed PNG", async ({ page }) =>
   await page.locator(".tile-card", { hasText: "red.png" }).click();
   await clickCell(page, 1, 0);
 
-  await page.getByRole("button", { name: "Export PNG" }).click();
+  await clickExport(page, "Export PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
@@ -688,7 +722,7 @@ test("imports a spritesheet, paints layered tiles, and exports an oriented map P
   await clickCell(page, 1, 1);
   await expect(page.locator("#placedCount")).toHaveText("2");
 
-  await page.getByRole("button", { name: "Export Map PNG" }).click();
+  await clickExport(page, "Export Map PNG");
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
   expect(exported.download).toBe("isometric-map-3x3.png");
@@ -745,7 +779,7 @@ test("imports 128px sprites onto a 128x64 isometric grid without splitting cells
 
   await page.locator(".tile-card", { hasText: "ground-terrain_1_2.png" }).click();
   await clickCell(page, 1, 1);
-  await page.getByRole("button", { name: "Export Map PNG" }).click();
+  await clickExport(page, "Export Map PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
@@ -796,7 +830,7 @@ test("anchors visible terrain pixels to the grid when imported sprites include b
 
   await expect(page.locator(".tile-card")).toHaveCount(1);
   await clickCell(page, 1, 1);
-  await page.getByRole("button", { name: "Export Map PNG" }).click();
+  await clickExport(page, "Export Map PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();

@@ -14,15 +14,20 @@
       </div>
       <div class="header-actions">
         <button id="themeToggle" class="secondary-button" type="button" aria-pressed="false">Dark Mode</button>
-        <button id="exportMapButton" class="secondary-button" type="button">Export Map PNG</button>
-        <button id="exportButton" class="primary-button" type="button">Export PNG</button>
       </div>
     </header>
 
     <main class="app-shell">
       <aside class="control-panel" aria-label="Project controls">
-        <section>
-          <h2>Project</h2>
+        <div class="control-tabs" role="tablist" aria-label="Project control sections">
+          <button id="importTab" class="control-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="importPanel">1. Import</button>
+          <button id="placeTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="placePanel" tabindex="-1">2. Place</button>
+          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportPanel" tabindex="-1">3. Export</button>
+        </div>
+
+        <section id="importPanel" class="control-tab-panel" role="tabpanel" aria-labelledby="importTab">
+          <h2>Import Sprites</h2>
+          <p class="panel-description">Set up the grid, then add individual PNGs or slice an existing sprite sheet.</p>
           <div class="field-grid">
             <label>
               Columns
@@ -48,17 +53,8 @@
               Sprite height
               <input id="spriteHeight" type="number" min="8" max="2048" value="128">
             </label>
-            <label>
-              Export columns
-              <input id="exportCols" type="number" min="1" max="64" value="8">
-            </label>
           </div>
           <button id="applySettings" class="secondary-button" type="button">Apply Settings</button>
-          <p id="projectStatus" class="status-text" aria-live="polite"></p>
-        </section>
-
-        <section>
-          <h2>Tiles</h2>
           <label class="file-picker">
             <span>Add PNGs</span>
             <input id="fileInput" type="file" accept="image/png" multiple>
@@ -67,16 +63,19 @@
             <span>Import Sprite Sheet</span>
             <input id="sheetFileInput" type="file" accept="image/png">
           </label>
+        </section>
+
+        <section id="placePanel" class="control-tab-panel" role="tabpanel" aria-labelledby="placeTab" hidden>
+          <h2>Place Sprites</h2>
+          <p class="panel-description">Choose a palette sprite, then paint, move, or erase it on the isometric grid.</p>
           <div class="tool-row" role="group" aria-label="Grid tools">
             <button id="paintTool" class="tool-button is-active" type="button">Paint</button>
             <button id="dropTool" class="tool-button" type="button">Move</button>
             <button id="eraseTool" class="tool-button" type="button">Erase</button>
           </div>
           <div id="palette" class="palette" aria-label="Tile palette"></div>
-        </section>
 
-        <section>
-          <h2>Layers</h2>
+          <h3>Layers</h3>
           <label>
             Active layer
             <select id="layerSelect"></select>
@@ -89,10 +88,7 @@
             <input id="layerVisible" type="checkbox" checked>
             Visible
           </label>
-        </section>
-
-        <section>
-          <h2>Grid</h2>
+          <h3>Grid</h3>
           <button id="clearGrid" class="secondary-button" type="button">Clear Grid</button>
           <dl class="stats">
             <div>
@@ -105,6 +101,19 @@
             </div>
           </dl>
         </section>
+
+        <section id="exportPanel" class="control-tab-panel" role="tabpanel" aria-labelledby="exportTab" hidden>
+          <h2>Export</h2>
+          <p class="panel-description">Download a packed sprite sheet for Godot or a rendered map preview.</p>
+          <label>
+            Sprite sheet columns
+            <input id="exportCols" type="number" min="1" max="64" value="8">
+          </label>
+          <button id="exportButton" class="primary-button" type="button">Export PNG</button>
+          <button id="exportMapButton" class="secondary-button" type="button">Export Map PNG</button>
+        </section>
+
+        <p id="projectStatus" class="status-text control-status" aria-live="polite"></p>
       </aside>
 
       <section class="workspace" aria-label="Tile grid workspace">
