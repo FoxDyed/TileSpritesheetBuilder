@@ -41,6 +41,21 @@ const els = {
   fileInput: document.querySelector("#fileInput"),
   sheetFileInput: document.querySelector("#sheetFileInput"),
   palette: document.querySelector("#palette"),
+  paletteManager: document.querySelector("#paletteManager"),
+  palettePreview: document.querySelector("#palettePreview"),
+  paletteSelectedName: document.querySelector("#paletteSelectedName"),
+  recropTile: document.querySelector("#recropTile"),
+  rotateTileLeft: document.querySelector("#rotateTileLeft"),
+  rotateTileRight: document.querySelector("#rotateTileRight"),
+  flipTileHorizontal: document.querySelector("#flipTileHorizontal"),
+  flipTileVertical: document.querySelector("#flipTileVertical"),
+  deleteTile: document.querySelector("#deleteTile"),
+  tileTintColor: document.querySelector("#tileTintColor"),
+  tileTintStrength: document.querySelector("#tileTintStrength"),
+  applyTileTint: document.querySelector("#applyTileTint"),
+  transparentTileColor: document.querySelector("#transparentTileColor"),
+  transparentTileTolerance: document.querySelector("#transparentTileTolerance"),
+  makeTileColorTransparent: document.querySelector("#makeTileColorTransparent"),
   paintTool: document.querySelector("#paintTool"),
   dropTool: document.querySelector("#dropTool"),
   eraseTool: document.querySelector("#eraseTool"),
@@ -351,20 +366,20 @@ function renderGrid() {
   }
 }
 
-function renderPalette() {
-  els.palette.replaceChildren();
+function renderTileCards(container, emptyText) {
+  container.replaceChildren();
   if (state.tiles.length === 0) {
     const empty = document.createElement("p");
     empty.className = "status-text";
-    empty.textContent = "Add PNGs to build your tile palette.";
-    els.palette.append(empty);
+    empty.textContent = emptyText;
+    container.append(empty);
     return;
   }
 
   for (const tile of state.tiles) {
     const card = document.createElement("button");
     card.type = "button";
-    card.className = "tile-card";
+    card.className = container === els.paletteManager ? "manager-tile-card" : "tile-card";
     if (tile.id === state.selectedTileId) card.classList.add("is-selected");
     card.title = tile.name;
 
@@ -382,8 +397,44 @@ function renderPalette() {
       renderPalette();
       updateStats();
     });
-    els.palette.append(card);
+    container.append(card);
   }
+}
+
+function renderPalette() {
+  renderTileCards(els.palette, "Add PNGs to build your tile palette.");
+  renderTileCards(els.paletteManager, "Import PNGs to begin managing your palette.");
+  updatePaletteEditor();
+}
+
+function selectedTile() {
+  return state.tiles.find((tile) => tile.id === state.selectedTileId) || null;
+}
+
+function updatePaletteEditor() {
+  const tile = selectedTile();
+  const controls = [
+    els.recropTile,
+    els.rotateTileLeft,
+    els.rotateTileRight,
+    els.flipTileHorizontal,
+    els.flipTileVertical,
+    els.deleteTile,
+    els.tileTintColor,
+    els.tileTintStrength,
+    els.applyTileTint,
+    els.transparentTileColor,
+    els.transparentTileTolerance,
+    els.makeTileColorTransparent
+  ];
+
+  controls.forEach((control) => {
+    control.disabled = !tile;
+  });
+  els.palettePreview.classList.toggle("has-tile", Boolean(tile));
+  els.palettePreview.src = tile ? tile.url : "";
+  els.palettePreview.alt = tile ? `${tile.name} preview` : "";
+  els.paletteSelectedName.textContent = tile ? `${tile.name} (${tile.width}x${tile.height})` : "Select a sprite to edit.";
 }
 
 function selectedTileLabel() {
@@ -428,6 +479,7 @@ function updateStats() {
   els.exportPlacedCount.textContent = String(placements);
   els.exportLayerCount.textContent = String(state.layers.length);
   els.exportGridSize.textContent = gridSize;
+  updatePaletteEditor();
 }
 
 function viewerScaleLabel() {
@@ -524,6 +576,130 @@ function imageToCanvas(image) {
   return canvas;
 }
 
+function replaceTileFromCanvas(tile, canvas, message) {
+  return new Promise((resolve) => {
+    const url = canvas.toDataURL("image/png");
+    const image = new Image();
+    image.onload = () => {
+      Object.assign(tile, {
+        url,
+        image,
+        width: canvas.width,
+        height: canvas.height,
+        bounds: visiblePixelBounds(canvas)
+      });
+      renderPalette();
+      renderGrid();
+      updateStats();
+      setStatus(message);
+      resolve(tile);
+    };
+    image.src = url;
+  });
+}
+
+function transformSelectedTile(transform, message) {
+  const tile = selectedTile();
+  if (!tile) return;
+  const source = imageToCanvas(tile.image);
+  const output = document.createElement("canvas");
+  const isQuarterTurn = transform === "rotate-left" || transform === "rotate-right";
+  output.width = isQuarterTurn ? source.height : source.width;
+  output.height = isQuarterTurn ? source.width : source.height;
+  const ctx = output.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+
+  if (transform === "rotate-left" || transform === "rotate-right") {
+    ctx.translate(output.width / 2, output.height / 2);
+    ctx.rotate(transform === "rotate-left" ? -Math.PI / 2 : Math.PI / 2);
+    ctx.drawImage(source, -source.width / 2, -source.height / 2);
+  } else {
+    ctx.translate(transform === "flip-horizontal" ? output.width : 0, transform === "flip-vertical" ? output.height : 0);
+    ctx.scale(transform === "flip-horizontal" ? -1 : 1, transform === "flip-vertical" ? -1 : 1);
+    ctx.drawImage(source, 0, 0);
+  }
+
+  replaceTileFromCanvas(tile, output, `${message} ${tile.name}.`);
+}
+
+function hexToRgb(hex) {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return null;
+  return {
+    red: Number.parseInt(match[1].slice(0, 2), 16),
+    green: Number.parseInt(match[1].slice(2, 4), 16),
+    blue: Number.parseInt(match[1].slice(4, 6), 16)
+  };
+}
+
+function applyTileTint() {
+  const tile = selectedTile();
+  const tint = hexToRgb(els.tileTintColor.value);
+  if (!tile || !tint) return;
+  const strength = clampNumber(els.tileTintStrength.value, 0, 100, 20);
+  els.tileTintStrength.value = strength;
+  const amount = strength / 100;
+  const canvas = imageToCanvas(tile.image);
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (pixels[index + 3] === 0) continue;
+    pixels[index] = Math.round(pixels[index] * (1 - amount) + tint.red * amount);
+    pixels[index + 1] = Math.round(pixels[index + 1] * (1 - amount) + tint.green * amount);
+    pixels[index + 2] = Math.round(pixels[index + 2] * (1 - amount) + tint.blue * amount);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  replaceTileFromCanvas(tile, canvas, `Applied ${strength}% tint to ${tile.name}.`);
+}
+
+function makeTileColorTransparent() {
+  const tile = selectedTile();
+  const remove = hexToRgb(els.transparentTileColor.value);
+  if (!tile || !remove) return;
+  const tolerance = clampNumber(els.transparentTileTolerance.value, 0, 255, 0);
+  els.transparentTileTolerance.value = tolerance;
+  const canvas = imageToCanvas(tile.image);
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  let changed = 0;
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (
+      Math.abs(pixels[index] - remove.red) <= tolerance
+      && Math.abs(pixels[index + 1] - remove.green) <= tolerance
+      && Math.abs(pixels[index + 2] - remove.blue) <= tolerance
+    ) {
+      if (pixels[index + 3] !== 0) changed += 1;
+      pixels[index + 3] = 0;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  replaceTileFromCanvas(tile, canvas, `Made ${changed} pixel${changed === 1 ? "" : "s"} transparent in ${tile.name}.`);
+}
+
+function deleteSelectedTile() {
+  const tile = selectedTile();
+  if (!tile) return;
+  state.tiles = state.tiles.filter((item) => item.id !== tile.id);
+  for (const layer of state.layers) {
+    for (const [key, placement] of layer.placements) {
+      if (placement.tileId === tile.id) layer.placements.delete(key);
+    }
+  }
+  if (state.pickedPlacement && state.pickedPlacement.tileId === tile.id) clearPickedPlacement();
+  state.selectedTileId = state.tiles[0] ? state.tiles[0].id : null;
+  renderPalette();
+  renderLayers();
+  renderGrid();
+  updateStats();
+  setStatus(`Deleted ${tile.name} from the palette and removed its placements.`);
+}
+
 function visiblePixelBounds(canvas) {
   const ctx = canvas.getContext("2d");
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -602,7 +778,7 @@ async function importSpritesheet(file) {
     renderPalette();
     updateStats();
     setStatus(`Imported ${imported} tiles from ${file.name} using ${state.spriteWidth}x${state.spriteHeight} sprite cells.`);
-    if (imported > 0) activateControlTab("placeTab");
+    if (imported > 0) activateControlTab("paletteTab");
   } catch (error) {
     console.error(error);
     setStatus(`Could not import ${file.name}.`);
@@ -618,37 +794,61 @@ async function processNextCrop() {
 
   try {
     const { image, url } = await readImageFile(file);
-    cropState = {
-      file,
-      image,
-      sourceUrl: url,
-      sourceBounds: visibleImageBounds(image),
-      outputWidth: state.spriteWidth,
-      outputHeight: state.spriteHeight,
-      scale: 1,
-      scaleMode: els.cropScaleMode.value,
-      offsetX: 0,
-      offsetY: 0,
-      dragging: false,
-      dragStartX: 0,
-      dragStartY: 0,
-      startOffsetX: 0,
-      startOffsetY: 0,
-      settingCrop: false
-    };
-    els.cropTitle.textContent = file.name;
-    els.cropWidth.value = cropState.outputWidth;
-    els.cropHeight.value = cropState.outputHeight;
-    els.cropPadding.value = 0;
-    els.setCrop.disabled = false;
-    els.saveCrop.disabled = false;
-    setupCropCanvas();
-    centerCropImage();
-    els.cropDialog.showModal();
+    openCropEditor({ file, image, sourceUrl: url });
   } catch (error) {
     console.error(error);
     setStatus(`Could not load ${file.name}.`);
     processNextCrop();
+  }
+}
+
+function openCropEditor({ file, image, sourceUrl = null, editTileId = null, outputWidth = state.spriteWidth, outputHeight = state.spriteHeight }) {
+  cropState = {
+    file,
+    image,
+    sourceUrl,
+    editTileId,
+    sourceBounds: visibleImageBounds(image),
+    outputWidth,
+    outputHeight,
+    scale: 1,
+    scaleMode: els.cropScaleMode.value,
+    offsetX: 0,
+    offsetY: 0,
+    dragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    settingCrop: false
+  };
+  els.cropTitle.textContent = file.name;
+  els.cropWidth.value = cropState.outputWidth;
+  els.cropHeight.value = cropState.outputHeight;
+  els.cropPadding.value = 0;
+  els.setCrop.disabled = false;
+  els.saveCrop.disabled = false;
+  setupCropCanvas();
+  centerCropImage();
+  els.cropDialog.showModal();
+}
+
+function recropSelectedTile() {
+  const tile = selectedTile();
+  if (!tile) return;
+  openCropEditor({
+    file: { name: tile.name },
+    image: tile.image,
+    editTileId: tile.id,
+    outputWidth: tile.width,
+    outputHeight: tile.height
+  });
+  setStatus(`Re-cropping ${tile.name}.`);
+}
+
+function releaseCropSource(crop) {
+  if (crop && crop.sourceUrl && crop.sourceUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(crop.sourceUrl);
   }
 }
 
@@ -841,39 +1041,46 @@ function setCurrentCrop() {
 
 function saveCurrentCrop() {
   if (!cropState || cropState.settingCrop) return;
+  const activeCrop = cropState;
   const output = currentCropCanvas();
   const url = output.toDataURL("image/png");
   const bounds = visiblePixelBounds(output);
   const image = new Image();
   image.onload = () => {
-    const tile = {
-      id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `tile-${Date.now()}-${tileCounter}`,
-      name: cropState.file.name || `Tile ${tileCounter}`,
-      url,
-      image,
-      width: output.width,
-      height: output.height,
-      bounds
-    };
-    tileCounter += 1;
-    state.tiles.push(tile);
+    if (cropState !== activeCrop) return;
+    let tile = state.tiles.find((item) => item.id === activeCrop.editTileId);
+    const wasEditing = Boolean(tile);
+    if (tile) {
+      Object.assign(tile, { url, image, width: output.width, height: output.height, bounds });
+    } else {
+      tile = {
+        id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `tile-${Date.now()}-${tileCounter}`,
+        name: activeCrop.file.name || `Tile ${tileCounter}`,
+        url,
+        image,
+        width: output.width,
+        height: output.height,
+        bounds
+      };
+      tileCounter += 1;
+      state.tiles.push(tile);
+    }
     state.selectedTileId = tile.id;
-    URL.revokeObjectURL(cropState.sourceUrl);
+    releaseCropSource(activeCrop);
     cropState = null;
     els.cropDialog.close();
     renderPalette();
+    renderGrid();
     updateStats();
-    setStatus(`Added ${tile.name} at ${output.width}x${output.height}.`);
-    activateControlTab("placeTab");
+    setStatus(`${wasEditing ? "Updated" : "Added"} ${tile.name} at ${output.width}x${output.height}.`);
+    activateControlTab("paletteTab");
     processNextCrop();
   };
   image.src = url;
 }
 
 function skipCurrentCrop() {
-  if (cropState) {
-    URL.revokeObjectURL(cropState.sourceUrl);
-  }
+  releaseCropSource(cropState);
   cropState = null;
   els.cropDialog.close();
   processNextCrop();
@@ -1140,6 +1347,14 @@ els.themeToggle.addEventListener("click", () => {
 els.exportButton.addEventListener("click", exportSpritesheet);
 els.exportMapButton.addEventListener("click", exportMapImage);
 els.exportCols.addEventListener("change", updateExportColumns);
+els.recropTile.addEventListener("click", recropSelectedTile);
+els.rotateTileLeft.addEventListener("click", () => transformSelectedTile("rotate-left", "Rotated left"));
+els.rotateTileRight.addEventListener("click", () => transformSelectedTile("rotate-right", "Rotated right"));
+els.flipTileHorizontal.addEventListener("click", () => transformSelectedTile("flip-horizontal", "Flipped horizontally"));
+els.flipTileVertical.addEventListener("click", () => transformSelectedTile("flip-vertical", "Flipped vertically"));
+els.deleteTile.addEventListener("click", deleteSelectedTile);
+els.applyTileTint.addEventListener("click", applyTileTint);
+els.makeTileColorTransparent.addEventListener("click", makeTileColorTransparent);
 els.layerSelect.addEventListener("change", () => setActiveLayer(els.layerSelect.value));
 els.addLayer.addEventListener("click", addLayer);
 els.deleteLayer.addEventListener("click", deleteActiveLayer);

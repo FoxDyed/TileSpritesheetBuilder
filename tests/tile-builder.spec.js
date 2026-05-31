@@ -214,7 +214,7 @@ async function selectControlTab(page, name) {
 }
 
 async function clickExport(page, name) {
-  await selectControlTab(page, "4. Export");
+  await selectControlTab(page, "5. Export");
   await page.getByRole("button", { name }).click();
 }
 
@@ -234,13 +234,13 @@ async function setProject(page, {
   await page.locator("#spriteWidth").fill(String(spriteWidth));
   await page.locator("#spriteHeight").fill(String(spriteHeight));
   await page.getByRole("button", { name: "Apply Settings" }).click();
-  await selectControlTab(page, "4. Export");
+  await selectControlTab(page, "5. Export");
   await page.locator("#exportCols").fill(String(exportCols));
   await page.locator("#exportCols").blur();
   await selectControlTab(page, "2. Import");
 }
 
-async function addTile(page, name, buffer) {
+async function addTile(page, name, buffer, { openPlace = true } = {}) {
   await page.locator("#fileInput").setInputFiles({
     name,
     mimeType: "image/png",
@@ -252,6 +252,7 @@ async function addTile(page, name, buffer) {
   await page.getByRole("button", { name: "Add Tile" }).click();
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", false);
   await expect(page.locator("#selectedTileName")).toHaveText(name);
+  if (openPlace) await selectControlTab(page, "4. Place");
 }
 
 async function clickCell(page, x, y) {
@@ -309,7 +310,7 @@ test("loads the static page and applies custom project settings", async ({ page 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
 });
 
-test("organizes the workflow into separate project, import, place, and export screens", async ({ page }) => {
+test("organizes the workflow into separate project, import, palette, place, and export screens", async ({ page }) => {
   await openApp(page);
 
   await expect(page.getByRole("tab", { name: "1. Project" })).toHaveAttribute("aria-selected", "true");
@@ -319,14 +320,16 @@ test("organizes the workflow into separate project, import, place, and export sc
   await selectControlTab(page, "2. Import");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
 
-  await addTile(page, "red.png", pngs.red);
-  await expect(page.getByRole("tab", { name: "3. Place" })).toHaveAttribute("aria-selected", "true");
+  await addTile(page, "red.png", pngs.red, { openPlace: false });
+  await expect(page.getByRole("tab", { name: "3. Palette" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".manager-tile-card", { hasText: "red.png" })).toBeVisible();
+  await selectControlTab(page, "4. Place");
   await expect(page.locator(".tile-card", { hasText: "red.png" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
   await clickCell(page, 1, 1);
 
-  await selectControlTab(page, "4. Export");
+  await selectControlTab(page, "5. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export Map PNG" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
@@ -334,9 +337,71 @@ test("organizes the workflow into separate project, import, place, and export sc
   await expect(page.locator("#exportPlacedCount")).toHaveText("1");
 });
 
+test("manages palette tiles with transforms, re-cropping, recolor, transparency, and delete", async ({ page }) => {
+  await openApp(page);
+  await setProject(page);
+  await addTile(page, "red.png", pngs.red);
+  await clickCell(page, 1, 1);
+  await expect(page.locator("#placedCount")).toHaveText("1");
+
+  await selectControlTab(page, "3. Palette");
+  await expect(page.locator(".manager-tile-card")).toHaveCount(1);
+  await expect(page.locator("#paletteSelectedName")).toHaveText("red.png (64x32)");
+
+  await page.getByRole("button", { name: "Rotate Right" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText("Rotated right red.png.");
+  await expect(page.locator("#paletteSelectedName")).toHaveText("red.png (32x64)");
+  await page.getByRole("button", { name: "Rotate Left" }).click();
+  await expect(page.locator("#paletteSelectedName")).toHaveText("red.png (64x32)");
+  await page.getByRole("button", { name: "Flip Horizontal" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText("Flipped horizontally red.png.");
+  await page.getByRole("button", { name: "Flip Vertical" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText("Flipped vertically red.png.");
+
+  await page.getByRole("button", { name: "Re-crop" }).click();
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
+  await page.getByRole("button", { name: "Add Tile" }).click();
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", false);
+  await expect(page.locator(".manager-tile-card")).toHaveCount(1);
+  await expect(page.locator("#projectStatus")).toHaveText("Updated red.png at 64x32.");
+
+  await page.locator("#tileTintColor").fill("#0000ff");
+  await page.locator("#tileTintStrength").fill("100");
+  await page.getByRole("button", { name: "Apply Tint" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText("Applied 100% tint to red.png.");
+  let sample = await page.locator("#palettePreview").evaluate(async (image) => {
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    return [...ctx.getImageData(1, 1, 1, 1).data];
+  });
+  expect(sample).toEqual([0, 0, 255, 255]);
+
+  await page.locator("#transparentTileColor").fill("#0000ff");
+  await page.getByRole("button", { name: "Make Transparent" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText("Made 2048 pixels transparent in red.png.");
+  sample = await page.locator("#palettePreview").evaluate(async (image) => {
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    return [...ctx.getImageData(1, 1, 1, 1).data];
+  });
+  expect(sample[3]).toBe(0);
+
+  await page.getByRole("button", { name: "Delete Tile" }).click();
+  await expect(page.locator(".manager-tile-card")).toHaveCount(0);
+  await expect(page.locator("#placedCount")).toHaveText("0");
+});
+
 test("zooms the grid viewer and labels non-1:1 preview scale", async ({ page }) => {
   await openApp(page);
-  await selectControlTab(page, "3. Place");
+  await selectControlTab(page, "4. Place");
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 100% (1:1)");
   await expect(page.locator("#zoomScale")).not.toHaveClass(/is-scaled/);
 
@@ -399,7 +464,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("tab", { name: "4. Export" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "5. Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 
@@ -415,7 +480,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
   expect(layout.screenTop).toBeGreaterThanOrEqual(0);
   expect(layout.navHeight).toBeLessThan(120);
 
-  await selectControlTab(page, "4. Export");
+  await selectControlTab(page, "5. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await selectControlTab(page, "1. Project");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
@@ -434,7 +499,7 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("tab", { name: "4. Export" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "5. Export" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 
   const layout = await page.evaluate(() => ({
@@ -449,7 +514,7 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
   expect(layout.navHeight).toBeLessThan(60);
   expect(layout.screenTop).toBeGreaterThanOrEqual(0);
 
-  await selectControlTab(page, "4. Export");
+  await selectControlTab(page, "5. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await selectControlTab(page, "1. Project");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
@@ -738,6 +803,7 @@ test("imports a spritesheet, paints layered tiles, and exports an oriented map P
     "Imported 2 tiles from terrain-sheet.png using 64x32 sprite cells."
   );
 
+  await selectControlTab(page, "4. Place");
   await page.locator(".tile-card", { hasText: "terrain-sheet_1_1.png" }).click();
   await clickCell(page, 1, 1);
   await page.getByRole("button", { name: "Add Layer" }).click();
@@ -809,6 +875,7 @@ test("imports 128px sprites onto a 128x64 isometric grid without splitting cells
     "Imported 2 tiles from ground-terrain.png using 128x128 sprite cells."
   );
 
+  await selectControlTab(page, "4. Place");
   await page.locator(".tile-card", { hasText: "ground-terrain_1_2.png" }).click();
   await clickCell(page, 1, 1);
   await clickExport(page, "Export Map PNG");
@@ -861,6 +928,7 @@ test("anchors visible terrain pixels to the grid when imported sprites include b
   });
 
   await expect(page.locator(".tile-card")).toHaveCount(1);
+  await selectControlTab(page, "4. Place");
   await clickCell(page, 1, 1);
   await clickExport(page, "Export Map PNG");
 
