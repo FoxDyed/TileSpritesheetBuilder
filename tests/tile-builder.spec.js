@@ -205,7 +205,7 @@ const pngs = {
 async function openApp(page) {
   await page.goto(appUrl);
   await expect(page).toHaveTitle("Isometric Tile Spritesheet Builder");
-  await expect(page.locator("#importScreen")).toBeVisible();
+  await expect(page.locator("#projectScreen")).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 }
 
@@ -214,7 +214,7 @@ async function selectControlTab(page, name) {
 }
 
 async function clickExport(page, name) {
-  await selectControlTab(page, "3. Export");
+  await selectControlTab(page, "4. Export");
   await page.getByRole("button", { name }).click();
 }
 
@@ -234,10 +234,10 @@ async function setProject(page, {
   await page.locator("#spriteWidth").fill(String(spriteWidth));
   await page.locator("#spriteHeight").fill(String(spriteHeight));
   await page.getByRole("button", { name: "Apply Settings" }).click();
-  await selectControlTab(page, "3. Export");
+  await selectControlTab(page, "4. Export");
   await page.locator("#exportCols").fill(String(exportCols));
   await page.locator("#exportCols").blur();
-  await selectControlTab(page, "1. Import");
+  await selectControlTab(page, "2. Import");
 }
 
 async function addTile(page, name, buffer) {
@@ -309,22 +309,24 @@ test("loads the static page and applies custom project settings", async ({ page 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
 });
 
-test("organizes the workflow into separate import, place, and export screens", async ({ page }) => {
+test("organizes the workflow into separate project, import, place, and export screens", async ({ page }) => {
   await openApp(page);
 
-  await expect(page.getByRole("tab", { name: "1. Import" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "1. Project" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeHidden();
   await expect(page.locator("#gridCanvas")).toBeHidden();
+  await selectControlTab(page, "2. Import");
+  await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
 
   await addTile(page, "red.png", pngs.red);
-  await expect(page.getByRole("tab", { name: "2. Place" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "3. Place" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".tile-card", { hasText: "red.png" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
   await clickCell(page, 1, 1);
 
-  await selectControlTab(page, "3. Export");
+  await selectControlTab(page, "4. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export Map PNG" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
@@ -334,7 +336,7 @@ test("organizes the workflow into separate import, place, and export screens", a
 
 test("zooms the grid viewer and labels non-1:1 preview scale", async ({ page }) => {
   await openApp(page);
-  await selectControlTab(page, "2. Place");
+  await selectControlTab(page, "3. Place");
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 100% (1:1)");
   await expect(page.locator("#zoomScale")).not.toHaveClass(/is-scaled/);
 
@@ -397,7 +399,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("tab", { name: "3. Export" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "4. Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 
@@ -405,7 +407,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
     viewportWidth: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     headerHeight: document.querySelector(".app-header").getBoundingClientRect().height,
-    screenTop: document.querySelector("#importScreen").getBoundingClientRect().top,
+    screenTop: document.querySelector("#projectScreen").getBoundingClientRect().top,
     navHeight: document.querySelector(".workflow-nav").getBoundingClientRect().height
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
@@ -413,9 +415,9 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
   expect(layout.screenTop).toBeGreaterThanOrEqual(0);
   expect(layout.navHeight).toBeLessThan(120);
 
-  await selectControlTab(page, "3. Export");
+  await selectControlTab(page, "4. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
-  await selectControlTab(page, "1. Import");
+  await selectControlTab(page, "1. Project");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
   await addTile(page, "red.png", pngs.red);
   await expect(page.locator("#gridCanvas")).toBeVisible();
@@ -432,7 +434,7 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("tab", { name: "3. Export" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "4. Export" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 
   const layout = await page.evaluate(() => ({
@@ -440,16 +442,16 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
     scrollWidth: document.documentElement.scrollWidth,
     headerHeight: document.querySelector(".app-header").getBoundingClientRect().height,
     navHeight: document.querySelector(".workflow-nav").getBoundingClientRect().height,
-    screenTop: document.querySelector("#importScreen").getBoundingClientRect().top
+    screenTop: document.querySelector("#projectScreen").getBoundingClientRect().top
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   expect(layout.headerHeight).toBeLessThan(64);
   expect(layout.navHeight).toBeLessThan(60);
   expect(layout.screenTop).toBeGreaterThanOrEqual(0);
 
-  await selectControlTab(page, "3. Export");
+  await selectControlTab(page, "4. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
-  await selectControlTab(page, "1. Import");
+  await selectControlTab(page, "1. Project");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
   await addTile(page, "red.png", pngs.red);
   const placementLayout = await page.evaluate(() => ({
@@ -562,6 +564,12 @@ test("locks crop source scale and nudges to the bottom half of a tall PNG", asyn
   await expect(page.getByRole("button", { name: "Center Image" })).toHaveCount(0);
   await page.locator("#cropNudgePixels").fill("64");
   await page.getByRole("button", { name: "Up", exact: true }).click();
+  await page.getByRole("button", { name: "Set Crop" }).click();
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
+  await expect(page.locator("#projectStatus")).toHaveText("Crop set to 128x128. Keep adjusting or add the tile.");
+  await expect(page.locator(".tile-card")).toHaveCount(0);
+  await page.getByRole("button", { name: "Set Crop" }).click();
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
   await page.getByRole("button", { name: "Add Tile" }).click();
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", false);
 

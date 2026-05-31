@@ -128,6 +128,7 @@ input {
   display: none;
 }
 
+.project-screen,
 .import-screen,
 .export-screen {
   min-height: 0;
@@ -157,6 +158,7 @@ input {
   line-height: 1.55;
 }
 
+.project-layout,
 .import-layout,
 .export-layout {
   display: grid;
@@ -164,6 +166,11 @@ input {
   gap: 18px;
   width: min(100%, 980px);
   margin: 0 auto;
+}
+
+.project-layout {
+  grid-template-columns: minmax(0, 620px);
+  justify-content: center;
 }
 
 .feature-panel {
@@ -196,7 +203,7 @@ input {
 
 .control-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -315,6 +322,11 @@ button:focus-visible {
 .tool-button:hover,
 .file-picker span:hover {
   border-color: var(--accent);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .file-picker input {
@@ -677,11 +689,13 @@ button:focus-visible {
     text-align: left;
   }
 
+  .project-screen,
   .import-screen,
   .export-screen {
     padding: 20px 14px;
   }
 
+  .project-layout,
   .import-layout,
   .export-layout {
     grid-template-columns: 1fr;
@@ -757,6 +771,7 @@ button:focus-visible {
     padding: 8px 12px;
   }
 
+  .project-screen,
   .import-screen,
   .export-screen {
     padding: 16px 12px;
@@ -925,6 +940,7 @@ button:focus-visible {
     min-height: calc(100vh - 95px);
   }
 
+  .project-screen,
   .import-screen,
   .export-screen {
     padding: 14px;

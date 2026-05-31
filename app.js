@@ -82,6 +82,7 @@ const els = {
   nudgeLeft: document.querySelector("#nudgeLeft"),
   nudgeRight: document.querySelector("#nudgeRight"),
   cropZoom: document.querySelector("#cropZoom"),
+  setCrop: document.querySelector("#setCrop"),
   saveCrop: document.querySelector("#saveCrop"),
   skipCrop: document.querySelector("#skipCrop")
 };
@@ -217,7 +218,7 @@ function applySettings() {
     }
     setStatus("Grid settings applied.");
   } else {
-    setStatus("Export settings applied.");
+    setStatus("Project settings applied.");
   }
 
   renderPalette();
@@ -226,6 +227,7 @@ function applySettings() {
   renderGrid();
   updateViewerZoom();
   updateStats();
+  activateControlTab("importTab");
 }
 
 function setStatus(message) {
@@ -631,12 +633,15 @@ async function processNextCrop() {
       dragStartX: 0,
       dragStartY: 0,
       startOffsetX: 0,
-      startOffsetY: 0
+      startOffsetY: 0,
+      settingCrop: false
     };
     els.cropTitle.textContent = file.name;
     els.cropWidth.value = cropState.outputWidth;
     els.cropHeight.value = cropState.outputHeight;
     els.cropPadding.value = 0;
+    els.setCrop.disabled = false;
+    els.saveCrop.disabled = false;
     setupCropCanvas();
     centerCropImage();
     els.cropDialog.showModal();
@@ -791,8 +796,7 @@ function drawCrop() {
   updateCropSourceInfo();
 }
 
-function saveCurrentCrop() {
-  if (!cropState) return;
+function currentCropCanvas() {
   const output = document.createElement("canvas");
   output.width = cropState.outputWidth;
   output.height = cropState.outputHeight;
@@ -805,7 +809,39 @@ function saveCurrentCrop() {
   const sh = els.cropCanvas.height / cropState.scale;
   outputCtx.clearRect(0, 0, output.width, output.height);
   outputCtx.drawImage(cropState.image, sx, sy, sw, sh, 0, 0, output.width, output.height);
+  return output;
+}
 
+function setCurrentCrop() {
+  if (!cropState || cropState.settingCrop) return;
+  const activeCrop = cropState;
+  const output = currentCropCanvas();
+  const image = new Image();
+  cropState.settingCrop = true;
+  els.setCrop.disabled = true;
+  els.saveCrop.disabled = true;
+  image.onload = () => {
+    if (cropState !== activeCrop) return;
+    cropState.image = image;
+    cropState.sourceBounds = visiblePixelBounds(output);
+    cropState.scaleMode = "1";
+    cropState.scale = cropScaleForMode("1");
+    cropState.offsetX = 0;
+    cropState.offsetY = 0;
+    updateCropZoomRange();
+    syncCropControls();
+    drawCrop();
+    cropState.settingCrop = false;
+    els.setCrop.disabled = false;
+    els.saveCrop.disabled = false;
+    setStatus(`Crop set to ${output.width}x${output.height}. Keep adjusting or add the tile.`);
+  };
+  image.src = output.toDataURL("image/png");
+}
+
+function saveCurrentCrop() {
+  if (!cropState || cropState.settingCrop) return;
+  const output = currentCropCanvas();
   const url = output.toDataURL("image/png");
   const bounds = visiblePixelBounds(output);
   const image = new Image();
@@ -1128,6 +1164,7 @@ els.nudgeUp.addEventListener("click", () => nudgeCrop(0, -1));
 els.nudgeDown.addEventListener("click", () => nudgeCrop(0, 1));
 els.nudgeLeft.addEventListener("click", () => nudgeCrop(-1, 0));
 els.nudgeRight.addEventListener("click", () => nudgeCrop(1, 0));
+els.setCrop.addEventListener("click", setCurrentCrop);
 els.saveCrop.addEventListener("click", saveCurrentCrop);
 els.skipCrop.addEventListener("click", skipCurrentCrop);
 els.cropCanvas.addEventListener("pointerdown", (event) => {
@@ -1163,7 +1200,7 @@ renderLayers();
 renderGrid();
 applyResponsiveViewerScale();
 updateStats();
-setStatus("Ready. Add PNGs or import a sprite sheet, then paint the layered isometric grid.");
+setStatus("Ready. Configure the project, then import sprites to build your palette.");
 
 window.__tileBuilderDebug = {
   getState() {
