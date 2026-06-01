@@ -42,6 +42,8 @@ const els = {
   sheetFileInput: document.querySelector("#sheetFileInput"),
   palette: document.querySelector("#palette"),
   paletteManager: document.querySelector("#paletteManager"),
+  savePalette: document.querySelector("#savePalette"),
+  paletteFileInput: document.querySelector("#paletteFileInput"),
   palettePreview: document.querySelector("#palettePreview"),
   paletteSelectedName: document.querySelector("#paletteSelectedName"),
   paletteTileName: document.querySelector("#paletteTileName"),
@@ -216,14 +218,7 @@ function applySettings() {
   els.spriteHeight.value = state.spriteHeight;
   els.exportCols.value = state.exportCols;
 
-  if (resolutionChanged) {
-    state.tiles = [];
-    state.selectedTileId = null;
-    clearPickedPlacement();
-    state.layers.forEach((layer) => layer.placements.clear());
-    tileCounter = 1;
-    setStatus("Tile size changed. Existing tiles were cleared so new crops match the export size.");
-  } else if (gridChanged || gridScaleChanged) {
+  if (gridChanged || gridScaleChanged) {
     for (const layer of state.layers) {
       for (const [key, placement] of layer.placements) {
         if (placement.x >= state.cols || placement.y >= state.rows) {
@@ -234,6 +229,11 @@ function applySettings() {
     if (state.pickedPlacement && (state.pickedPlacement.x >= state.cols || state.pickedPlacement.y >= state.rows)) {
       clearPickedPlacement();
     }
+  }
+
+  if (resolutionChanged) {
+    setStatus("Sprite size changed. Existing palette was preserved; new imports and exports use the updated sprite size.");
+  } else if (gridChanged || gridScaleChanged) {
     setStatus("Grid settings applied.");
   } else {
     setStatus("Project settings applied.");
@@ -407,6 +407,7 @@ function renderTileCards(container, emptyText) {
 function renderPalette() {
   renderTileCards(els.palette, "Add PNGs to build your tile palette.");
   renderTileCards(els.paletteManager, "Import PNGs to begin managing your palette.");
+  els.savePalette.disabled = state.tiles.length === 0;
   updatePaletteEditor();
 }
 
@@ -687,6 +688,95 @@ function makeTileColorTransparent() {
 
   ctx.putImageData(imageData, 0, 0);
   replaceTileFromCanvas(tile, canvas, `Made ${changed} pixel${changed === 1 ? "" : "s"} transparent in ${tile.name}.`);
+}
+
+function savePalette() {
+  if (state.tiles.length === 0) {
+    setStatus("Import at least one tile before saving a palette.");
+    return;
+  }
+  const palette = {
+    format: "isometric-tile-palette",
+    version: 1,
+    tiles: state.tiles.map((tile) => ({
+      id: tile.id,
+      name: tile.name,
+      url: tile.url,
+      width: tile.width,
+      height: tile.height,
+      bounds: tile.bounds
+    }))
+  };
+  const blob = new Blob([JSON.stringify(palette, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.download = "isometric-tile-palette.json";
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 0);
+  setStatus(`Saved ${state.tiles.length} palette tile${state.tiles.length === 1 ? "" : "s"}.`);
+}
+
+function imageFromDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    if (typeof url !== "string" || !url.startsWith("data:image/png")) {
+      reject(new Error("Palette tile is not a PNG data URL."));
+      return;
+    }
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Palette tile image could not be loaded."));
+    image.src = url;
+  });
+}
+
+async function loadPalette(file) {
+  if (!file) return;
+  try {
+    const palette = JSON.parse(await file.text());
+    if (palette.format !== "isometric-tile-palette" || palette.version !== 1 || !Array.isArray(palette.tiles)) {
+      throw new Error("Unsupported palette file.");
+    }
+    const ids = new Set();
+    const tiles = await Promise.all(palette.tiles.map(async (tile, index) => {
+      const image = await imageFromDataUrl(tile.url);
+      const id = typeof tile.id === "string" && tile.id && !ids.has(tile.id)
+        ? tile.id
+        : `tile-${Date.now()}-${tileCounter + index}`;
+      ids.add(id);
+      return {
+        id,
+        name: typeof tile.name === "string" && tile.name.trim() ? tile.name.trim() : `Tile ${tileCounter + index}`,
+        url: tile.url,
+        image,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        bounds: visibleImageBounds(image)
+      };
+    }));
+    let removedPlacements = 0;
+    for (const layer of state.layers) {
+      for (const [key, placement] of layer.placements) {
+        if (ids.has(placement.tileId)) continue;
+        layer.placements.delete(key);
+        removedPlacements += 1;
+      }
+    }
+    if (state.pickedPlacement && !ids.has(state.pickedPlacement.tileId)) clearPickedPlacement();
+    state.tiles = tiles;
+    state.selectedTileId = tiles[0] ? tiles[0].id : null;
+    tileCounter += tiles.length;
+    renderPalette();
+    renderLayers();
+    renderGrid();
+    updateStats();
+    const removalMessage = removedPlacements
+      ? ` Removed ${removedPlacements} placement${removedPlacements === 1 ? "" : "s"} that did not match the loaded palette.`
+      : "";
+    setStatus(`Loaded ${tiles.length} palette tile${tiles.length === 1 ? "" : "s"} from ${file.name}.${removalMessage}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Could not load palette from ${file.name}.`);
+  }
 }
 
 function uniqueTileName(name) {
@@ -1389,6 +1479,11 @@ els.fileInput.addEventListener("change", (event) => {
 });
 els.sheetFileInput.addEventListener("change", (event) => {
   importSpritesheet(event.target.files[0]);
+  event.target.value = "";
+});
+els.savePalette.addEventListener("click", savePalette);
+els.paletteFileInput.addEventListener("change", (event) => {
+  loadPalette(event.target.files[0]);
   event.target.value = "";
 });
 els.paintTool.addEventListener("click", () => {

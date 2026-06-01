@@ -16,6 +16,7 @@ Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
   cropping.
 - Import sprite sheets as reusable tile-library entries.
 - Manage palette tiles by cloning, renaming, deleting, re-cropping, rotating, flipping, tinting, or making a chosen color transparent.
+- Keep palette tiles when project settings change, and save or load a palette as a portable JSON file.
 - Paint layered isometric maps and move placed tiles between empty grid cells.
 - Place cropped tiles onto a custom isometric diamond grid.
 - Erase or replace placed tiles.

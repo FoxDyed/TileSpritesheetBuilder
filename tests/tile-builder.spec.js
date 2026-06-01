@@ -303,11 +303,59 @@ test("loads the static page and applies custom project settings", async ({ page 
   await setProject(page);
 
   await expect(page.locator("#projectStatus")).toHaveText(
-    "Tile size changed. Existing tiles were cleared so new crops match the export size."
+    "Sprite size changed. Existing palette was preserved; new imports and exports use the updated sprite size."
   );
 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("width", 288);
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
+});
+
+test("preserves palette tiles across settings changes and saves and reloads palettes", async ({ page }) => {
+  await openApp(page);
+  await setProject(page);
+  await addTile(page, "red.png", pngs.red);
+  await clickCell(page, 1, 1);
+  await selectControlTab(page, "3. Palette");
+  await page.locator("#paletteTileName").fill("hero.png");
+  await page.getByRole("button", { name: "Rename Tile" }).click();
+
+  await selectControlTab(page, "1. Project");
+  await page.locator("#spriteWidth").fill("80");
+  await page.locator("#spriteHeight").fill("40");
+  await page.getByRole("button", { name: "Apply Settings" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText(
+    "Sprite size changed. Existing palette was preserved; new imports and exports use the updated sprite size."
+  );
+  await expect(page.locator("#importedTileCount")).toHaveText("1");
+  await expect(page.locator("#placedCount")).toHaveText("1");
+
+  await selectControlTab(page, "3. Palette");
+  await expect(page.locator(".manager-tile-card")).toHaveCount(1);
+  await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (64x32)");
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save Palette" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("isometric-tile-palette.json");
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const savedPalette = Buffer.concat(chunks);
+  const paletteJson = JSON.parse(savedPalette.toString("utf8"));
+  expect(paletteJson.tiles).toHaveLength(1);
+  expect(paletteJson.tiles[0].name).toBe("hero.png");
+  expect(paletteJson.tiles[0].url).toMatch(/^data:image\/png/);
+
+  await page.getByRole("button", { name: "Delete Tile" }).click();
+  await expect(page.locator(".manager-tile-card")).toHaveCount(0);
+  await page.locator("#paletteFileInput").setInputFiles({
+    name: "saved-palette.json",
+    mimeType: "application/json",
+    buffer: savedPalette
+  });
+  await expect(page.locator(".manager-tile-card")).toHaveCount(1);
+  await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (64x32)");
+  await expect(page.locator("#projectStatus")).toHaveText("Loaded 1 palette tile from saved-palette.json.");
 });
 
 test("organizes the workflow into separate project, import, palette, place, and export screens", async ({ page }) => {

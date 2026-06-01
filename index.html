@@ -112,6 +112,13 @@
           <section class="feature-panel palette-library-panel">
             <h3>Sprite Library</h3>
             <p class="panel-description">Select a tile to preview and edit it. Changes are shared with placement and export.</p>
+            <div class="palette-file-tools">
+              <button id="savePalette" class="secondary-button" type="button">Save Palette</button>
+              <label class="file-picker">
+                <span>Load Palette</span>
+                <input id="paletteFileInput" type="file" accept=".json,application/json">
+              </label>
+            </div>
             <div id="paletteManager" class="palette manager-palette" aria-label="Palette manager tiles"></div>
           </section>
           <section class="feature-panel palette-editor-panel">
