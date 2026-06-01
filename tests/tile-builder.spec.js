@@ -385,7 +385,8 @@ test("organizes the workflow into separate project, import, palette, place, and 
 
   await selectControlTab(page, "5. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Export Map PNG" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export Full Scene PNG" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export Active Layer PNG" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
   await expect(page.locator("#exportTileCount")).toHaveText("1");
   await expect(page.locator("#exportPlacedCount")).toHaveText("1");
@@ -647,8 +648,8 @@ test("drop mode moves placed tiles only into empty grid cells", async ({ page })
   await clickCell(page, 2, 1);
   await expect(page.locator("#placedCount")).toHaveText("2");
 
-  await page.getByRole("button", { name: "Move" }).click();
-  await expect(page.getByRole("button", { name: "Move" })).toHaveClass(/is-active/);
+  await page.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveClass(/is-active/);
 
   await clickCell(page, 1, 1);
   await expect(page.locator("#projectStatus")).toHaveText("Picked up red.png. Choose an empty spot.");
@@ -875,7 +876,7 @@ test("uses the crop diamond overlay as the placement anchor for oversized sprite
     .resolves.toEqual({ x: 60, y: 70 });
   await selectControlTab(page, "4. Place");
   await clickCell(page, 1, 1);
-  await clickExport(page, "Export Map PNG");
+  await clickExport(page, "Export Full Scene PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
@@ -964,24 +965,37 @@ test("imports a spritesheet, paints layered tiles, and exports an oriented map P
   await page.locator(".tile-card", { hasText: "terrain-sheet_1_1.png" }).click();
   await clickCell(page, 1, 1);
   await page.getByRole("button", { name: "Add Layer" }).click();
-  await expect(page.locator("#layerSelect option")).toHaveCount(2);
-  await page.locator("#layerSelect").selectOption({ label: "Layer 2 (0)" });
+  await expect(page.locator(".layer-list-item")).toHaveCount(2);
+  expect(await page.locator("#layerList").evaluate((list) => list.getBoundingClientRect().height)).toBeGreaterThan(0);
+  await expect(page.locator(".layer-list-name")).toHaveText(["Layer 2", "Layer 1"]);
+  await page.locator("#layerName").fill("Foreground");
+  await page.getByRole("button", { name: "Rename Layer" }).click();
+  await expect(page.locator(".layer-list-name")).toHaveText(["Foreground", "Layer 1"]);
+  await page.getByRole("button", { name: "Move Down" }).click();
+  await expect(page.locator(".layer-list-name")).toHaveText(["Layer 1", "Foreground"]);
+  await page.getByRole("button", { name: "Move Up" }).click();
+  await expect(page.locator(".layer-list-name")).toHaveText(["Foreground", "Layer 1"]);
   expect(await page.evaluate(() => window.__tileBuilderDebug.getState())).toMatchObject({
-    activeLayerName: "Layer 2",
+    activeLayerName: "Foreground",
     layerPlacements: [
       { name: "Layer 1", count: 1 },
-      { name: "Layer 2", count: 0 }
+      { name: "Foreground", count: 0 }
     ]
   });
   await page.locator(".tile-card", { hasText: "terrain-sheet_1_2.png" }).click();
   await clickCell(page, 1, 1);
   await expect(page.locator("#placedCount")).toHaveText("2");
 
-  await clickExport(page, "Export Map PNG");
+  await clickExport(page, "Export Active Layer PNG");
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
-  const exported = await exportInfo.jsonValue();
+  let exported = await exportInfo.jsonValue();
+  expect(exported.download).toBe("isometric-layer-foreground-3x3.png");
+  await expect(page.locator("#projectStatus")).toHaveText(/Exported Foreground as .* from 1 tiles\./);
+
+  await clickExport(page, "Export Full Scene PNG");
+  exported = await page.evaluate(() => window.__lastTileDownload);
   expect(exported.download).toBe("isometric-map-3x3.png");
-  await expect(page.locator("#projectStatus")).toHaveText(/Exported map as .* from 2 visible tiles\./);
+  await expect(page.locator("#projectStatus")).toHaveText(/Exported full scene as .* from 2 visible tiles\./);
 
   const inspected = await page.evaluate(async (href) => {
     const image = new Image();
@@ -1035,7 +1049,7 @@ test("imports 128px sprites onto a 128x64 isometric grid without splitting cells
   await selectControlTab(page, "4. Place");
   await page.locator(".tile-card", { hasText: "ground-terrain_1_2.png" }).click();
   await clickCell(page, 1, 1);
-  await clickExport(page, "Export Map PNG");
+  await clickExport(page, "Export Full Scene PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();
@@ -1087,7 +1101,7 @@ test("anchors visible terrain pixels to the grid when imported sprites include b
   await expect(page.locator(".tile-card")).toHaveCount(1);
   await selectControlTab(page, "4. Place");
   await clickCell(page, 1, 1);
-  await clickExport(page, "Export Map PNG");
+  await clickExport(page, "Export Full Scene PNG");
 
   const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
   const exported = await exportInfo.jsonValue();

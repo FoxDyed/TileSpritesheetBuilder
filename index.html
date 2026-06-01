@@ -203,18 +203,21 @@
             <p id="placementPreviewName" class="status-text">None selected.</p>
           </div>
           <h3>Layers</h3>
+          <p class="panel-note">Top layers render in front. Select a layer to paint or manage it.</p>
+          <div id="layerList" class="layer-list" aria-label="Scene layers"></div>
           <label>
-            Active layer
-            <select id="layerSelect"></select>
+            Layer name
+            <input id="layerName" type="text" maxlength="80">
           </label>
-          <div class="tool-row" role="group" aria-label="Layer controls">
+          <button id="renameLayer" class="secondary-button" type="button">Rename Layer</button>
+          <div class="tool-row layer-control-row" role="group" aria-label="Layer order controls">
+            <button id="moveLayerUp" class="secondary-button" type="button">Move Up</button>
+            <button id="moveLayerDown" class="secondary-button" type="button">Move Down</button>
+          </div>
+          <div class="tool-row layer-control-row" role="group" aria-label="Layer controls">
             <button id="addLayer" class="secondary-button" type="button">Add Layer</button>
             <button id="deleteLayer" class="secondary-button" type="button">Delete Layer</button>
           </div>
-          <label class="checkbox-field">
-            <input id="layerVisible" type="checkbox" checked>
-            Visible
-          </label>
           <h3>Grid</h3>
           <button id="clearGrid" class="secondary-button" type="button">Clear Grid</button>
           <dl class="stats">
@@ -279,13 +282,14 @@
           </section>
           <section class="feature-panel">
             <h3>Downloads</h3>
-            <p class="panel-description">Packed sheets use Y-then-X placement order. Map PNGs render visible layers.</p>
+            <p class="panel-description">Packed sheets use Y-then-X placement order. Scene PNGs render visible layers. Layer PNGs preserve the selected layer on a transparent canvas.</p>
             <label>
               Sprite sheet columns
               <input id="exportCols" type="number" min="1" max="64" value="8">
             </label>
             <button id="exportButton" class="primary-button" type="button">Export PNG</button>
-            <button id="exportMapButton" class="secondary-button" type="button">Export Map PNG</button>
+            <button id="exportMapButton" class="secondary-button" type="button">Export Full Scene PNG</button>
+            <button id="exportLayerButton" class="secondary-button" type="button">Export Active Layer PNG</button>
           </section>
         </div>
       </section>

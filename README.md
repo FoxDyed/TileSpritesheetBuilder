@@ -18,12 +18,13 @@ Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
 - Import sprite sheets as reusable tile-library entries.
 - Manage palette tiles by cloning, renaming, deleting, re-cropping, rotating, flipping, tinting, or making a chosen color transparent.
 - Keep palette tiles when project settings change, and save or load a palette as a portable JSON file.
-- Paint layered isometric maps and move placed tiles between empty grid cells.
+- Paint layered isometric maps, rename or reorder layers, and move placed tiles between empty grid cells.
 - Preview the currently selected or moving tile while working in the placement grid.
 - Place cropped tiles onto a custom isometric diamond grid.
 - Erase or replace placed tiles.
 - Export placed tiles as a packed transparent PNG spritesheet sorted by grid
   row (`y`) and then column (`x`).
+- Export the visible full scene or the selected layer as a transparent PNG.
 
 ## Use Locally
 

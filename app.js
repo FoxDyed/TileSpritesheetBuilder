@@ -68,10 +68,14 @@ const els = {
   themeToggle: document.querySelector("#themeToggle"),
   exportButton: document.querySelector("#exportButton"),
   exportMapButton: document.querySelector("#exportMapButton"),
-  layerSelect: document.querySelector("#layerSelect"),
+  exportLayerButton: document.querySelector("#exportLayerButton"),
+  layerList: document.querySelector("#layerList"),
+  layerName: document.querySelector("#layerName"),
+  renameLayer: document.querySelector("#renameLayer"),
+  moveLayerUp: document.querySelector("#moveLayerUp"),
+  moveLayerDown: document.querySelector("#moveLayerDown"),
   addLayer: document.querySelector("#addLayer"),
   deleteLayer: document.querySelector("#deleteLayer"),
-  layerVisible: document.querySelector("#layerVisible"),
   placedCount: document.querySelector("#placedCount"),
   selectedTileName: document.querySelector("#selectedTileName"),
   placementPreview: document.querySelector("#placementPreview"),
@@ -479,18 +483,53 @@ function updatePlacementPreview() {
 }
 
 function renderLayers() {
-  els.layerSelect.replaceChildren();
-  for (const layer of state.layers) {
-    const option = document.createElement("option");
-    option.value = layer.id;
-    option.textContent = `${layer.name} (${layer.placements.size})`;
-    els.layerSelect.append(option);
-  }
-
   const layer = activeLayer();
   state.activeLayerId = layer.id;
-  els.layerSelect.value = layer.id;
-  els.layerVisible.checked = layer.visible;
+  els.layerList.replaceChildren();
+
+  for (const listedLayer of [...state.layers].reverse()) {
+    const item = document.createElement("div");
+    item.className = "layer-list-item";
+    item.classList.toggle("is-active", listedLayer.id === layer.id);
+
+    const select = document.createElement("button");
+    select.className = "layer-list-select";
+    select.type = "button";
+    select.dataset.layerId = listedLayer.id;
+    select.setAttribute("aria-pressed", String(listedLayer.id === layer.id));
+
+    const name = document.createElement("span");
+    name.className = "layer-list-name";
+    name.textContent = listedLayer.name;
+
+    const count = document.createElement("span");
+    count.className = "layer-list-count";
+    count.textContent = `${listedLayer.placements.size} tile${listedLayer.placements.size === 1 ? "" : "s"}`;
+
+    const visibility = document.createElement("label");
+    visibility.className = "layer-list-visible";
+    visibility.title = `Show ${listedLayer.name}`;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = listedLayer.visible;
+    checkbox.setAttribute("aria-label", `Show ${listedLayer.name}`);
+    checkbox.addEventListener("change", () => setLayerVisibility(listedLayer.id, checkbox.checked));
+
+    const visibilityText = document.createElement("span");
+    visibilityText.textContent = "Visible";
+
+    select.addEventListener("click", () => setActiveLayer(listedLayer.id));
+    select.append(name, count);
+    visibility.append(checkbox, visibilityText);
+    item.append(select, visibility);
+    els.layerList.append(item);
+  }
+
+  els.layerName.value = layer.name;
+  const layerIndex = state.layers.findIndex((item) => item.id === layer.id);
+  els.moveLayerUp.disabled = layerIndex === state.layers.length - 1;
+  els.moveLayerDown.disabled = layerIndex === 0;
   els.deleteLayer.disabled = state.layers.length === 1;
 }
 
@@ -1465,8 +1504,37 @@ function setActiveLayer(layerId) {
   setStatus(`${activeLayer().name} selected.`);
 }
 
-function setActiveLayerVisibility(visible) {
+function renameActiveLayer() {
   const layer = activeLayer();
+  const nextName = els.layerName.value.trim();
+  if (!nextName) {
+    els.layerName.value = layer.name;
+    setStatus("Enter a layer name before renaming.");
+    return;
+  }
+
+  const previousName = layer.name;
+  layer.name = nextName;
+  renderLayers();
+  setStatus(`${previousName} renamed to ${nextName}.`);
+}
+
+function moveActiveLayer(direction) {
+  const layer = activeLayer();
+  const index = state.layers.findIndex((item) => item.id === layer.id);
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= state.layers.length) return;
+  state.layers.splice(index, 1);
+  state.layers.splice(nextIndex, 0, layer);
+  renderLayers();
+  renderGrid();
+  updateStats();
+  setStatus(`${layer.name} moved ${direction > 0 ? "up" : "down"}.`);
+}
+
+function setLayerVisibility(layerId, visible) {
+  const layer = state.layers.find((item) => item.id === layerId);
+  if (!layer) return;
   layer.visible = visible;
   renderLayers();
   renderGrid();
@@ -1506,15 +1574,10 @@ function exportSpritesheet() {
   setStatus(`Exported ${placements.length} tiles as ${sheet.width}x${sheet.height} PNG.`);
 }
 
-function exportMapImage() {
-  const placements = visibleLayers().flatMap((layer, layerIndex) => {
+function renderSceneLayers(layers) {
+  const placements = layers.flatMap((layer, layerIndex) => {
     return sortedLayerPlacements(layer).map((placement) => ({ ...placement, layerIndex }));
   });
-
-  if (placements.length === 0) {
-    setStatus("Paint at least one visible tile before exporting the map.");
-    return;
-  }
 
   const map = document.createElement("canvas");
   map.width = els.gridCanvas.width;
@@ -1530,11 +1593,41 @@ function exportMapImage() {
     ctx.drawImage(tile.image, rect.x, rect.y, rect.width, rect.height);
   });
 
+  return { map, placements };
+}
+
+function downloadSceneImage(map, filename) {
   const link = document.createElement("a");
-  link.download = `isometric-map-${state.cols}x${state.rows}.png`;
+  link.download = filename;
   link.href = map.toDataURL("image/png");
   link.click();
-  setStatus(`Exported map as ${map.width}x${map.height} PNG from ${placements.length} visible tiles.`);
+}
+
+function exportMapImage() {
+  const { map, placements } = renderSceneLayers(visibleLayers());
+  if (placements.length === 0) {
+    setStatus("Paint at least one visible tile before exporting the full scene.");
+    return;
+  }
+
+  downloadSceneImage(map, `isometric-map-${state.cols}x${state.rows}.png`);
+  setStatus(`Exported full scene as ${map.width}x${map.height} PNG from ${placements.length} visible tiles.`);
+}
+
+function filenameSlug(value) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "layer";
+}
+
+function exportActiveLayerImage() {
+  const layer = activeLayer();
+  const { map, placements } = renderSceneLayers([layer]);
+  if (placements.length === 0) {
+    setStatus(`Paint at least one tile on ${layer.name} before exporting it.`);
+    return;
+  }
+
+  downloadSceneImage(map, `isometric-layer-${filenameSlug(layer.name)}-${state.cols}x${state.rows}.png`);
+  setStatus(`Exported ${layer.name} as ${map.width}x${map.height} PNG from ${placements.length} tiles.`);
 }
 
 function handleCropZoom() {
@@ -1597,6 +1690,7 @@ els.themeToggle.addEventListener("click", () => {
 });
 els.exportButton.addEventListener("click", exportSpritesheet);
 els.exportMapButton.addEventListener("click", exportMapImage);
+els.exportLayerButton.addEventListener("click", exportActiveLayerImage);
 els.exportCols.addEventListener("change", updateExportColumns);
 els.cloneTile.addEventListener("click", cloneSelectedTile);
 els.renameTile.addEventListener("click", renameSelectedTile);
@@ -1613,10 +1707,16 @@ els.flipTileVertical.addEventListener("click", () => transformSelectedTile("flip
 els.deleteTile.addEventListener("click", deleteSelectedTile);
 els.applyTileTint.addEventListener("click", applyTileTint);
 els.makeTileColorTransparent.addEventListener("click", makeTileColorTransparent);
-els.layerSelect.addEventListener("change", () => setActiveLayer(els.layerSelect.value));
+els.renameLayer.addEventListener("click", renameActiveLayer);
+els.layerName.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  renameActiveLayer();
+});
+els.moveLayerUp.addEventListener("click", () => moveActiveLayer(1));
+els.moveLayerDown.addEventListener("click", () => moveActiveLayer(-1));
 els.addLayer.addEventListener("click", addLayer);
 els.deleteLayer.addEventListener("click", deleteActiveLayer);
-els.layerVisible.addEventListener("change", () => setActiveLayerVisibility(els.layerVisible.checked));
 els.zoomOut.addEventListener("click", () => stepViewerZoom(-1));
 els.zoomIn.addEventListener("click", () => stepViewerZoom(1));
 els.zoomReset.addEventListener("click", () => setViewerScale(1));
@@ -1690,7 +1790,13 @@ window.__tileBuilderDebug = {
       layerCount: state.layers.length,
       activeLayerId: state.activeLayerId,
       activeLayerName: activeLayer().name,
-      layerPlacements: state.layers.map((layer) => ({ name: layer.name, count: layer.placements.size, visible: layer.visible })),
+      layerPlacements: state.layers.map((layer, order) => ({
+        id: layer.id,
+        name: layer.name,
+        count: layer.placements.size,
+        visible: layer.visible,
+        order
+      })),
       pickedPlacement: state.pickedPlacement,
       selectedTileId: state.selectedTileId,
       tiles: state.tiles.map((tile) => ({

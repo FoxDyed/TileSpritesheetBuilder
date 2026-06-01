@@ -398,6 +398,82 @@ button:disabled {
   gap: 8px;
 }
 
+.layer-control-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel-note {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.layer-list {
+  display: grid;
+  flex-shrink: 0;
+  gap: 7px;
+  max-height: 214px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.layer-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.layer-list-item.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.layer-list-select {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.layer-list-name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-list-count {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.layer-list-visible {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  border-left: 1px solid var(--line);
+}
+
+.layer-list-visible input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .tool-button {
   padding: 9px 10px;
   color: var(--muted);
