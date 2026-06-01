@@ -366,6 +366,8 @@ test("organizes the workflow into separate project, import, palette, place, and 
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeHidden();
   await expect(page.locator("#gridCanvas")).toBeHidden();
+  await expect(page.locator("#placementPreviewEmpty")).toHaveText("Select a tile to preview.");
+  await expect(page.locator("#placementPreviewName")).toHaveText("None selected.");
   await selectControlTab(page, "2. Import");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
 
@@ -374,6 +376,9 @@ test("organizes the workflow into separate project, import, palette, place, and 
   await expect(page.locator(".manager-tile-card", { hasText: "red.png" })).toBeVisible();
   await selectControlTab(page, "4. Place");
   await expect(page.locator(".tile-card", { hasText: "red.png" })).toBeVisible();
+  await expect(page.locator("#placementPreview")).toHaveAttribute("alt", "red.png placement preview");
+  await expect(page.locator("#placementPreview")).toHaveClass(/has-tile/);
+  await expect(page.locator("#placementPreviewName")).toHaveText("red.png");
   await expect(page.locator("#gridCanvas")).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
   await clickCell(page, 1, 1);
@@ -648,6 +653,8 @@ test("drop mode moves placed tiles only into empty grid cells", async ({ page })
   await clickCell(page, 1, 1);
   await expect(page.locator("#projectStatus")).toHaveText("Picked up red.png. Choose an empty spot.");
   await expect(page.locator("#selectedTileName")).toHaveText("Moving red.png");
+  await expect(page.locator("#placementPreview")).toHaveAttribute("alt", "red.png placement preview");
+  await expect(page.locator("#placementPreviewName")).toHaveText("Moving red.png");
 
   await clickCell(page, 2, 1);
   await expect(page.locator("#placedCount")).toHaveText("2");
@@ -658,6 +665,8 @@ test("drop mode moves placed tiles only into empty grid cells", async ({ page })
   await expect(page.locator("#placedCount")).toHaveText("2");
   await expect(page.locator("#projectStatus")).toHaveText("Moved red.png to 0, 1.");
   await expect(page.locator("#selectedTileName")).toHaveText("blue.png");
+  await expect(page.locator("#placementPreview")).toHaveAttribute("alt", "blue.png placement preview");
+  await expect(page.locator("#placementPreviewName")).toHaveText("blue.png");
   await expect(page.evaluate(() => window.__tileBuilderDebug.getState().pickedPlacement)).resolves.toBeNull();
 
   await clickExport(page, "Export PNG");

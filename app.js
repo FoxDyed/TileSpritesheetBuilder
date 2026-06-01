@@ -74,6 +74,9 @@ const els = {
   layerVisible: document.querySelector("#layerVisible"),
   placedCount: document.querySelector("#placedCount"),
   selectedTileName: document.querySelector("#selectedTileName"),
+  placementPreview: document.querySelector("#placementPreview"),
+  placementPreviewEmpty: document.querySelector("#placementPreviewEmpty"),
+  placementPreviewName: document.querySelector("#placementPreviewName"),
   importedTileCount: document.querySelector("#importedTileCount"),
   importGridSize: document.querySelector("#importGridSize"),
   exportTileCount: document.querySelector("#exportTileCount"),
@@ -463,6 +466,18 @@ function selectedTileLabel() {
   return selected ? selected.name : "None";
 }
 
+function updatePlacementPreview() {
+  const tile = state.pickedPlacement
+    ? state.tiles.find((item) => item.id === state.pickedPlacement.tileId)
+    : selectedTile();
+  const moving = Boolean(tile && state.pickedPlacement);
+  els.placementPreview.classList.toggle("has-tile", Boolean(tile));
+  els.placementPreview.src = tile ? tile.url : "";
+  els.placementPreview.alt = tile ? `${tile.name} placement preview` : "";
+  els.placementPreviewEmpty.hidden = Boolean(tile);
+  els.placementPreviewName.textContent = tile ? `${moving ? "Moving " : ""}${tile.name}` : "None selected.";
+}
+
 function renderLayers() {
   els.layerSelect.replaceChildren();
   for (const layer of state.layers) {
@@ -497,6 +512,7 @@ function updateStats() {
   els.exportLayerCount.textContent = String(state.layers.length);
   els.exportGridSize.textContent = gridSize;
   updatePaletteEditor();
+  updatePlacementPreview();
 }
 
 function viewerScaleLabel() {
