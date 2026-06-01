@@ -37,6 +37,8 @@ const els = {
   spriteHeight: document.querySelector("#spriteHeight"),
   exportCols: document.querySelector("#exportCols"),
   applySettings: document.querySelector("#applySettings"),
+  saveProject: document.querySelector("#saveProject"),
+  projectFileInput: document.querySelector("#projectFileInput"),
   projectStatus: document.querySelector("#projectStatus"),
   fileInput: document.querySelector("#fileInput"),
   sheetFileInput: document.querySelector("#sheetFileInput"),
@@ -211,13 +213,7 @@ function readSettings() {
   };
 }
 
-function applySettings() {
-  const next = readSettings();
-  const resolutionChanged = next.spriteWidth !== state.spriteWidth || next.spriteHeight !== state.spriteHeight;
-  const gridScaleChanged = next.tileWidth !== state.tileWidth || next.tileHeight !== state.tileHeight;
-  const gridChanged = next.cols !== state.cols || next.rows !== state.rows;
-
-  Object.assign(state, next);
+function syncSettingsControls() {
   els.gridCols.value = state.cols;
   els.gridRows.value = state.rows;
   els.tileWidth.value = state.tileWidth;
@@ -225,6 +221,16 @@ function applySettings() {
   els.spriteWidth.value = state.spriteWidth;
   els.spriteHeight.value = state.spriteHeight;
   els.exportCols.value = state.exportCols;
+}
+
+function applySettings() {
+  const next = readSettings();
+  const resolutionChanged = next.spriteWidth !== state.spriteWidth || next.spriteHeight !== state.spriteHeight;
+  const gridScaleChanged = next.tileWidth !== state.tileWidth || next.tileHeight !== state.tileHeight;
+  const gridChanged = next.cols !== state.cols || next.rows !== state.rows;
+
+  Object.assign(state, next);
+  syncSettingsControls();
 
   if (gridChanged || gridScaleChanged) {
     for (const layer of state.layers) {
@@ -766,15 +772,8 @@ function makeTileColorTransparent() {
   replaceTileFromCanvas(tile, canvas, `Made ${changed} pixel${changed === 1 ? "" : "s"} transparent in ${tile.name}.`);
 }
 
-function savePalette() {
-  if (state.tiles.length === 0) {
-    setStatus("Import at least one tile before saving a palette.");
-    return;
-  }
-  const palette = {
-    format: "isometric-tile-palette",
-    version: 1,
-    tiles: state.tiles.map((tile) => ({
+function serializeTiles() {
+  return state.tiles.map((tile) => ({
       id: tile.id,
       name: tile.name,
       url: tile.url,
@@ -782,15 +781,57 @@ function savePalette() {
       height: tile.height,
       bounds: tile.bounds,
       anchor: tile.anchor
-    }))
-  };
-  const blob = new Blob([JSON.stringify(palette, null, 2)], { type: "application/json" });
+    }));
+}
+
+function downloadJson(filename, value) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
   const link = document.createElement("a");
-  link.download = "isometric-tile-palette.json";
+  link.download = filename;
   link.href = URL.createObjectURL(blob);
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 0);
+}
+
+function savePalette() {
+  if (state.tiles.length === 0) {
+    setStatus("Import at least one tile before saving a palette.");
+    return;
+  }
+  downloadJson("isometric-tile-palette.json", {
+    format: "isometric-tile-palette",
+    version: 1,
+    tiles: serializeTiles()
+  });
   setStatus(`Saved ${state.tiles.length} palette tile${state.tiles.length === 1 ? "" : "s"}.`);
+}
+
+function saveProject() {
+  downloadJson("isometric-tile-project.json", {
+    format: "isometric-tile-project",
+    version: 1,
+    settings: {
+      cols: state.cols,
+      rows: state.rows,
+      tileWidth: state.tileWidth,
+      tileHeight: state.tileHeight,
+      spriteWidth: state.spriteWidth,
+      spriteHeight: state.spriteHeight,
+      exportCols: state.exportCols
+    },
+    tiles: serializeTiles(),
+    layers: state.layers.map((layer) => ({
+      id: layer.id,
+      name: layer.name,
+      visible: layer.visible,
+      placements: sortedLayerPlacements(layer)
+    })),
+    selectedTileId: state.selectedTileId,
+    activeLayerId: state.activeLayerId,
+    tool: state.tool,
+    viewerScale: state.viewerScale
+  });
+  setStatus(`Saved project with ${state.tiles.length} palette tile${state.tiles.length === 1 ? "" : "s"}, ${state.layers.length} layer${state.layers.length === 1 ? "" : "s"}, and ${placedTileCount()} placement${placedTileCount() === 1 ? "" : "s"}.`);
 }
 
 function imageFromDataUrl(url) {
@@ -806,6 +847,31 @@ function imageFromDataUrl(url) {
   });
 }
 
+async function deserializeTiles(serializedTiles, requireStableIds = false) {
+  if (!Array.isArray(serializedTiles)) throw new Error("Tiles are missing.");
+  const ids = new Set();
+  const tiles = await Promise.all(serializedTiles.map(async (tile, index) => {
+    const image = await imageFromDataUrl(tile.url);
+    const hasStableId = typeof tile.id === "string" && tile.id && !ids.has(tile.id);
+    if (requireStableIds && !hasStableId) throw new Error("Project tile IDs must be unique.");
+    const id = hasStableId ? tile.id : `tile-${Date.now()}-${tileCounter + index}`;
+    ids.add(id);
+    return {
+      id,
+      name: typeof tile.name === "string" && tile.name.trim() ? tile.name.trim() : `Tile ${tileCounter + index}`,
+      url: tile.url,
+      image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      bounds: visibleImageBounds(image),
+      anchor: tile.anchor && Number.isFinite(tile.anchor.x) && Number.isFinite(tile.anchor.y)
+        ? { x: tile.anchor.x, y: tile.anchor.y }
+        : null
+    };
+  }));
+  return { tiles, ids };
+}
+
 async function loadPalette(file) {
   if (!file) return;
   try {
@@ -813,26 +879,7 @@ async function loadPalette(file) {
     if (palette.format !== "isometric-tile-palette" || palette.version !== 1 || !Array.isArray(palette.tiles)) {
       throw new Error("Unsupported palette file.");
     }
-    const ids = new Set();
-    const tiles = await Promise.all(palette.tiles.map(async (tile, index) => {
-      const image = await imageFromDataUrl(tile.url);
-      const id = typeof tile.id === "string" && tile.id && !ids.has(tile.id)
-        ? tile.id
-        : `tile-${Date.now()}-${tileCounter + index}`;
-      ids.add(id);
-      return {
-        id,
-        name: typeof tile.name === "string" && tile.name.trim() ? tile.name.trim() : `Tile ${tileCounter + index}`,
-        url: tile.url,
-        image,
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-        bounds: visibleImageBounds(image),
-        anchor: tile.anchor && Number.isFinite(tile.anchor.x) && Number.isFinite(tile.anchor.y)
-          ? { x: tile.anchor.x, y: tile.anchor.y }
-          : null
-      };
-    }));
+    const { tiles, ids } = await deserializeTiles(palette.tiles);
     let removedPlacements = 0;
     for (const layer of state.layers) {
       for (const [key, placement] of layer.placements) {
@@ -856,6 +903,108 @@ async function loadPalette(file) {
   } catch (error) {
     console.error(error);
     setStatus(`Could not load palette from ${file.name}.`);
+  }
+}
+
+function deserializeProjectSettings(settings) {
+  if (!settings || typeof settings !== "object") throw new Error("Project settings are missing.");
+  return {
+    cols: clampNumber(settings.cols, 1, 64, 8),
+    rows: clampNumber(settings.rows, 1, 64, 8),
+    tileWidth: clampNumber(settings.tileWidth, 8, 1024, 128),
+    tileHeight: clampNumber(settings.tileHeight, 8, 1024, 64),
+    spriteWidth: clampNumber(settings.spriteWidth, 8, 2048, 128),
+    spriteHeight: clampNumber(settings.spriteHeight, 8, 2048, 128),
+    exportCols: clampNumber(settings.exportCols, 1, 64, 8)
+  };
+}
+
+function deserializeProjectLayers(serializedLayers, tileIds, settings) {
+  if (!Array.isArray(serializedLayers) || serializedLayers.length === 0) {
+    throw new Error("Project layers are missing.");
+  }
+
+  const layerIds = new Set();
+  const layers = serializedLayers.map((layer, layerIndex) => {
+    if (typeof layer.id !== "string" || !layer.id || layerIds.has(layer.id)) {
+      throw new Error("Project layer IDs must be unique.");
+    }
+    if (!Array.isArray(layer.placements)) throw new Error("Project layer placements are missing.");
+    layerIds.add(layer.id);
+    const placements = new Map();
+    for (const placement of layer.placements) {
+      const validPlacement = Number.isInteger(placement.x)
+        && Number.isInteger(placement.y)
+        && placement.x >= 0
+        && placement.y >= 0
+        && placement.x < settings.cols
+        && placement.y < settings.rows
+        && tileIds.has(placement.tileId);
+      if (!validPlacement) throw new Error("Project placement is invalid.");
+      placements.set(placementKey(placement.x, placement.y), {
+        x: placement.x,
+        y: placement.y,
+        tileId: placement.tileId
+      });
+    }
+    return {
+      id: layer.id,
+      name: typeof layer.name === "string" && layer.name.trim() ? layer.name.trim() : `Layer ${layerIndex + 1}`,
+      visible: layer.visible !== false,
+      placements
+    };
+  });
+  return { layers, layerIds };
+}
+
+async function loadProject(file) {
+  if (!file) return;
+  try {
+    const project = JSON.parse(await file.text());
+    if (project.format !== "isometric-tile-project" || project.version !== 1) {
+      throw new Error("Unsupported project file.");
+    }
+
+    const settings = deserializeProjectSettings(project.settings);
+    const { tiles, ids: tileIds } = await deserializeTiles(project.tiles, true);
+    const { layers, layerIds } = deserializeProjectLayers(project.layers, tileIds, settings);
+    const selectedTileId = tileIds.has(project.selectedTileId) ? project.selectedTileId : (tiles[0] ? tiles[0].id : null);
+    const activeLayerId = layerIds.has(project.activeLayerId) ? project.activeLayerId : layers[0].id;
+    const tool = ["paint", "drop", "erase"].includes(project.tool) ? project.tool : "paint";
+    const viewerScale = Number.isFinite(project.viewerScale)
+      ? Math.min(viewerZoomLevels[viewerZoomLevels.length - 1], Math.max(viewerZoomLevels[0], project.viewerScale))
+      : 1;
+
+    pendingFiles.splice(0);
+    if (cropState) releaseCropSource(cropState);
+    cropState = null;
+    if (els.cropDialog.open) els.cropDialog.close();
+    Object.assign(state, settings, {
+      tiles,
+      layers,
+      selectedTileId,
+      activeLayerId,
+      tool,
+      viewerScale,
+      userSetViewerScale: viewerScale !== 1,
+      pickedPlacement: null,
+      hoverCell: null
+    });
+    tileCounter += tiles.length;
+    els.hoverCell.textContent = "Cell: none";
+    syncSettingsControls();
+    renderPalette();
+    renderLayers();
+    resizeGridCanvas();
+    renderGrid();
+    updateViewerZoom();
+    updateToolButtons();
+    updateStats();
+    activateControlTab("projectTab");
+    setStatus(`Loaded project from ${file.name}: ${tiles.length} palette tile${tiles.length === 1 ? "" : "s"}, ${layers.length} layer${layers.length === 1 ? "" : "s"}, and ${placedTileCount()} placement${placedTileCount() === 1 ? "" : "s"}.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Could not load project from ${file.name}.`);
   }
 }
 
@@ -1659,6 +1808,11 @@ for (const tab of els.controlTabs) {
   tab.addEventListener("keydown", handleControlTabKeydown);
 }
 els.applySettings.addEventListener("click", applySettings);
+els.saveProject.addEventListener("click", saveProject);
+els.projectFileInput.addEventListener("change", (event) => {
+  loadProject(event.target.files[0]);
+  event.target.value = "";
+});
 els.fileInput.addEventListener("change", (event) => {
   enqueueFiles(event.target.files);
   event.target.value = "";

@@ -359,11 +359,81 @@ test("preserves palette tiles across settings changes and saves and reloads pale
   await expect(page.locator("#projectStatus")).toHaveText("Loaded 1 palette tile from saved-palette.json.");
 });
 
+test("saves and reloads a complete project with settings, sprites, layers, and placements", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 5, rows: 4, tileWidth: 64, tileHeight: 32, exportCols: 3 });
+  await addTile(page, "red.png", pngs.red);
+  await clickCell(page, 1, 1);
+  await addTile(page, "blue.png", pngs.blue);
+  await page.getByRole("button", { name: "Add Layer" }).click();
+  await page.locator("#layerName").fill("Foreground");
+  await page.getByRole("button", { name: "Rename Layer" }).click();
+  await clickCell(page, 2, 1);
+  await page.getByRole("checkbox", { name: "Show Layer 1" }).uncheck();
+
+  await selectControlTab(page, "1. Project");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save Project" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("isometric-tile-project.json");
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const savedProject = Buffer.concat(chunks);
+  const projectJson = JSON.parse(savedProject.toString("utf8"));
+  expect(projectJson.settings).toMatchObject({ cols: 5, rows: 4, tileWidth: 64, tileHeight: 32, exportCols: 3 });
+  expect(projectJson.tiles.map((tile) => tile.name)).toEqual(["red.png", "blue.png"]);
+  expect(projectJson.layers.map((layer) => ({ name: layer.name, visible: layer.visible, placements: layer.placements.length }))).toEqual([
+    { name: "Layer 1", visible: false, placements: 1 },
+    { name: "Foreground", visible: true, placements: 1 }
+  ]);
+
+  await selectControlTab(page, "4. Place");
+  await page.getByRole("button", { name: "Delete Layer" }).click();
+  await selectControlTab(page, "3. Palette");
+  await page.getByRole("button", { name: "Delete Tile" }).click();
+  await selectControlTab(page, "1. Project");
+  await page.locator("#gridCols").fill("2");
+  await page.getByRole("button", { name: "Apply Settings" }).click();
+  await selectControlTab(page, "1. Project");
+  await page.locator("#projectFileInput").setInputFiles({
+    name: "saved-project.json",
+    mimeType: "application/json",
+    buffer: savedProject
+  });
+
+  await expect(page.locator("#projectStatus")).toHaveText(
+    "Loaded project from saved-project.json: 2 palette tiles, 2 layers, and 2 placements."
+  );
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState())).toMatchObject({
+    cols: 5,
+    rows: 4,
+    tileWidth: 64,
+    tileHeight: 32,
+    exportCols: 3,
+    placedCount: 2,
+    layerCount: 2,
+    activeLayerName: "Foreground",
+    layerPlacements: [
+      { name: "Layer 1", count: 1, visible: false, order: 0 },
+      { name: "Foreground", count: 1, visible: true, order: 1 }
+    ],
+    tiles: [
+      { name: "red.png" },
+      { name: "blue.png" }
+    ]
+  });
+  await selectControlTab(page, "4. Place");
+  await expect(page.locator(".layer-list-name")).toHaveText(["Foreground", "Layer 1"]);
+  await expect(page.getByRole("checkbox", { name: "Show Layer 1" })).not.toBeChecked();
+});
+
 test("organizes the workflow into separate project, import, palette, place, and export screens", async ({ page }) => {
   await openApp(page);
 
   await expect(page.getByRole("tab", { name: "1. Project" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save Project" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeHidden();
   await expect(page.locator("#gridCanvas")).toBeHidden();
   await expect(page.locator("#placementPreviewEmpty")).toHaveText("Select a tile to preview.");
