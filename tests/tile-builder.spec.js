@@ -345,6 +345,7 @@ test("preserves palette tiles across settings changes and saves and reloads pale
   expect(paletteJson.tiles).toHaveLength(1);
   expect(paletteJson.tiles[0].name).toBe("hero.png");
   expect(paletteJson.tiles[0].url).toMatch(/^data:image\/png/);
+  expect(paletteJson.tiles[0].anchor).toEqual({ x: 32, y: 16 });
 
   await page.getByRole("button", { name: "Delete Tile" }).click();
   await expect(page.locator(".manager-tile-card")).toHaveCount(0);
@@ -417,8 +418,12 @@ test("manages palette tiles with clone, rename, transforms, re-cropping, recolor
   await page.getByRole("button", { name: "Rotate Right" }).click();
   await expect(page.locator("#projectStatus")).toHaveText("Rotated right hero.png.");
   await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (32x64)");
+  await expect(page.evaluate(() => window.__tileBuilderDebug.getState().tiles.find((tile) => tile.name === "hero.png").anchor))
+    .resolves.toEqual({ x: 16, y: 32 });
   await page.getByRole("button", { name: "Rotate Left" }).click();
   await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (64x32)");
+  await expect(page.evaluate(() => window.__tileBuilderDebug.getState().tiles.find((tile) => tile.name === "hero.png").anchor))
+    .resolves.toEqual({ x: 32, y: 16 });
   await page.getByRole("button", { name: "Flip Horizontal" }).click();
   await expect(page.locator("#projectStatus")).toHaveText("Flipped horizontally hero.png.");
   await page.getByRole("button", { name: "Flip Vertical" }).click();
@@ -811,6 +816,64 @@ test("auto crops visible pixels with optional padding and keeps the result edita
   expect(inspected.paddingSample[3]).toBe(0);
   expect(inspected.visibleSample[2]).toBeGreaterThan(inspected.visibleSample[0]);
   expect(inspected.visibleSample[3]).toBe(255);
+});
+
+test("uses the crop diamond overlay as the placement anchor for oversized sprites", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, {
+    cols: 3,
+    rows: 3,
+    tileWidth: 64,
+    tileHeight: 32,
+    spriteWidth: 96,
+    spriteHeight: 96,
+    exportCols: 1
+  });
+
+  await page.locator("#fileInput").setInputFiles({
+    name: "oversized-tile.png",
+    mimeType: "image/png",
+    buffer: createTransparentRectPng(
+      96,
+      96,
+      { left: 16, top: 16, right: 79, bottom: 79 },
+      [0, 0, 255, 255]
+    )
+  });
+
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
+  await expect(page.locator(".crop-guide-description")).toHaveText(
+    "The diamond overlay is the grid tile anchor. Drag or nudge the sprite around it to control how oversized art sits on the map."
+  );
+  await page.getByRole("button", { name: "Add Tile" }).click();
+  await selectControlTab(page, "4. Place");
+  await clickCell(page, 1, 1);
+  await clickExport(page, "Export Map PNG");
+
+  const exportInfo = await page.waitForFunction(() => window.__lastTileDownload);
+  const exported = await exportInfo.jsonValue();
+  const inspected = await page.evaluate(async (href) => {
+    const image = new Image();
+    image.src = href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+    const centerX = pad + (state.rows - 1) * state.tileWidth / 2 + state.tileWidth / 2;
+    const centerY = pad + state.tileHeight / 2 + (1 + 1) * state.tileHeight / 2;
+    return {
+      aligned: [...ctx.getImageData(centerX, centerY - 1, 1, 1).data],
+      belowGuide: [...ctx.getImageData(centerX, centerY + state.tileHeight / 2 - 1, 1, 1).data]
+    };
+  }, exported.href);
+
+  expect(inspected.aligned[2]).toBeGreaterThan(inspected.aligned[0]);
+  expect(inspected.aligned[3]).toBe(255);
+  expect(inspected.belowGuide[3]).toBe(0);
 });
 
 test("exports placed tiles as a Y-then-X sorted packed PNG", async ({ page }) => {

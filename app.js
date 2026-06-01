@@ -331,6 +331,14 @@ function tileDrawRect(tile, cell) {
   const center = cellCenter(cell.x, cell.y);
   const width = tile.width || tile.image.naturalWidth || state.spriteWidth;
   const height = tile.height || tile.image.naturalHeight || state.spriteHeight;
+  if (tile.anchor) {
+    return {
+      x: center.x - tile.anchor.x,
+      y: center.y - tile.anchor.y,
+      width,
+      height
+    };
+  }
   const bounds = tile.bounds || { x: 0, y: 0, width, height };
   return {
     x: center.x - (bounds.x + bounds.width / 2),
@@ -584,7 +592,7 @@ function imageToCanvas(image) {
   return canvas;
 }
 
-function replaceTileFromCanvas(tile, canvas, message) {
+function replaceTileFromCanvas(tile, canvas, message, updates = {}) {
   return new Promise((resolve) => {
     const url = canvas.toDataURL("image/png");
     const image = new Image();
@@ -594,7 +602,8 @@ function replaceTileFromCanvas(tile, canvas, message) {
         image,
         width: canvas.width,
         height: canvas.height,
-        bounds: visiblePixelBounds(canvas)
+        bounds: visiblePixelBounds(canvas),
+        ...updates
       });
       renderPalette();
       renderGrid();
@@ -627,7 +636,18 @@ function transformSelectedTile(transform, message) {
     ctx.drawImage(source, 0, 0);
   }
 
-  replaceTileFromCanvas(tile, output, `${message} ${tile.name}.`);
+  replaceTileFromCanvas(tile, output, `${message} ${tile.name}.`, {
+    anchor: transformedTileAnchor(tile.anchor, transform, source.width, source.height)
+  });
+}
+
+function transformedTileAnchor(anchor, transform, width, height) {
+  if (!anchor) return null;
+  if (transform === "rotate-left") return { x: anchor.y, y: width - anchor.x };
+  if (transform === "rotate-right") return { x: height - anchor.y, y: anchor.x };
+  if (transform === "flip-horizontal") return { x: width - anchor.x, y: anchor.y };
+  if (transform === "flip-vertical") return { x: anchor.x, y: height - anchor.y };
+  return { ...anchor };
 }
 
 function hexToRgb(hex) {
@@ -704,7 +724,8 @@ function savePalette() {
       url: tile.url,
       width: tile.width,
       height: tile.height,
-      bounds: tile.bounds
+      bounds: tile.bounds,
+      anchor: tile.anchor
     }))
   };
   const blob = new Blob([JSON.stringify(palette, null, 2)], { type: "application/json" });
@@ -750,7 +771,10 @@ async function loadPalette(file) {
         image,
         width: image.naturalWidth,
         height: image.naturalHeight,
-        bounds: visibleImageBounds(image)
+        bounds: visibleImageBounds(image),
+        anchor: tile.anchor && Number.isFinite(tile.anchor.x) && Number.isFinite(tile.anchor.y)
+          ? { x: tile.anchor.x, y: tile.anchor.y }
+          : null
       };
     }));
     let removedPlacements = 0;
@@ -807,7 +831,8 @@ function cloneSelectedTile() {
       image,
       width: tile.width,
       height: tile.height,
-      bounds: tile.bounds ? { ...tile.bounds } : null
+      bounds: tile.bounds ? { ...tile.bounds } : null,
+      anchor: tile.anchor ? { ...tile.anchor } : null
     };
     tileCounter += 1;
     state.tiles.push(clone);
@@ -1143,10 +1168,41 @@ function drawCrop() {
     cropState.image.width * cropState.scale,
     cropState.image.height * cropState.scale
   );
+  drawCropGridOverlay();
   cropCtx.strokeStyle = cssVar("--accent");
   cropCtx.lineWidth = 3;
   cropCtx.strokeRect(1.5, 1.5, els.cropCanvas.width - 3, els.cropCanvas.height - 3);
   updateCropSourceInfo();
+}
+
+function cropAnchor(width = cropState.outputWidth, height = cropState.outputHeight) {
+  return {
+    x: width / 2,
+    y: height - state.tileHeight / 2
+  };
+}
+
+function drawCropGridOverlay() {
+  const anchor = cropAnchor();
+  const scaleX = els.cropCanvas.width / cropState.outputWidth;
+  const scaleY = els.cropCanvas.height / cropState.outputHeight;
+  const centerX = anchor.x * scaleX;
+  const centerY = anchor.y * scaleY;
+  const halfWidth = state.tileWidth / 2 * scaleX;
+  const halfHeight = state.tileHeight / 2 * scaleY;
+  cropCtx.save();
+  cropCtx.beginPath();
+  cropCtx.moveTo(centerX, centerY - halfHeight);
+  cropCtx.lineTo(centerX + halfWidth, centerY);
+  cropCtx.lineTo(centerX, centerY + halfHeight);
+  cropCtx.lineTo(centerX - halfWidth, centerY);
+  cropCtx.closePath();
+  cropCtx.fillStyle = cssVar("--grid-hover");
+  cropCtx.strokeStyle = cssVar("--accent");
+  cropCtx.lineWidth = 2;
+  cropCtx.fill();
+  cropCtx.stroke();
+  cropCtx.restore();
 }
 
 function currentCropCanvas() {
@@ -1203,8 +1259,9 @@ function saveCurrentCrop() {
     if (cropState !== activeCrop) return;
     let tile = state.tiles.find((item) => item.id === activeCrop.editTileId);
     const wasEditing = Boolean(tile);
+    const anchor = cropAnchor(output.width, output.height);
     if (tile) {
-      Object.assign(tile, { url, image, width: output.width, height: output.height, bounds });
+      Object.assign(tile, { url, image, width: output.width, height: output.height, bounds, anchor });
     } else {
       tile = {
         id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `tile-${Date.now()}-${tileCounter}`,
@@ -1213,7 +1270,8 @@ function saveCurrentCrop() {
         image,
         width: output.width,
         height: output.height,
-        bounds
+        bounds,
+        anchor
       };
       tileCounter += 1;
       state.tiles.push(tile);
@@ -1599,7 +1657,14 @@ window.__tileBuilderDebug = {
       activeLayerName: activeLayer().name,
       layerPlacements: state.layers.map((layer) => ({ name: layer.name, count: layer.placements.size, visible: layer.visible })),
       pickedPlacement: state.pickedPlacement,
-      selectedTileId: state.selectedTileId
+      selectedTileId: state.selectedTileId,
+      tiles: state.tiles.map((tile) => ({
+        id: tile.id,
+        name: tile.name,
+        width: tile.width,
+        height: tile.height,
+        anchor: tile.anchor
+      }))
     };
   }
 };

@@ -14,6 +14,7 @@ Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
 - Auto-crop transparent margins with optional padding while keeping the result editable.
 - Lock crop source scale and nudge or drag tall or wide source images before
   cropping.
+- Align manually cropped sprites against a grid-diamond overlay so oversized art keeps its intended map anchor.
 - Import sprite sheets as reusable tile-library entries.
 - Manage palette tiles by cloning, renaming, deleting, re-cropping, rotating, flipping, tinting, or making a chosen color transparent.
 - Keep palette tiles when project settings change, and save or load a palette as a portable JSON file.
