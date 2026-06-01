@@ -260,7 +260,7 @@ async function clickCell(page, x, y) {
   await page.locator("#gridCanvas").evaluate((canvas, cell) => {
     const state = window.__tileBuilderDebug.getState();
     const rect = canvas.getBoundingClientRect();
-    const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.tileHeight) * 0.35));
+    const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
     const halfW = state.tileWidth / 2;
     const halfH = state.tileHeight / 2;
     const canvasX = pad + (state.rows - 1) * halfW + halfW + (cell.x - cell.y) * halfW;
