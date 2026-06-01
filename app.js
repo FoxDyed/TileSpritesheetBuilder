@@ -44,6 +44,9 @@ const els = {
   paletteManager: document.querySelector("#paletteManager"),
   palettePreview: document.querySelector("#palettePreview"),
   paletteSelectedName: document.querySelector("#paletteSelectedName"),
+  paletteTileName: document.querySelector("#paletteTileName"),
+  renameTile: document.querySelector("#renameTile"),
+  cloneTile: document.querySelector("#cloneTile"),
   recropTile: document.querySelector("#recropTile"),
   rotateTileLeft: document.querySelector("#rotateTileLeft"),
   rotateTileRight: document.querySelector("#rotateTileRight"),
@@ -414,6 +417,9 @@ function selectedTile() {
 function updatePaletteEditor() {
   const tile = selectedTile();
   const controls = [
+    els.paletteTileName,
+    els.renameTile,
+    els.cloneTile,
     els.recropTile,
     els.rotateTileLeft,
     els.rotateTileRight,
@@ -435,6 +441,7 @@ function updatePaletteEditor() {
   els.palettePreview.src = tile ? tile.url : "";
   els.palettePreview.alt = tile ? `${tile.name} preview` : "";
   els.paletteSelectedName.textContent = tile ? `${tile.name} (${tile.width}x${tile.height})` : "Select a sprite to edit.";
+  els.paletteTileName.value = tile ? tile.name : "";
 }
 
 function selectedTileLabel() {
@@ -680,6 +687,62 @@ function makeTileColorTransparent() {
 
   ctx.putImageData(imageData, 0, 0);
   replaceTileFromCanvas(tile, canvas, `Made ${changed} pixel${changed === 1 ? "" : "s"} transparent in ${tile.name}.`);
+}
+
+function uniqueTileName(name) {
+  const extensionIndex = name.lastIndexOf(".");
+  const hasExtension = extensionIndex > 0;
+  const baseName = hasExtension ? name.slice(0, extensionIndex) : name;
+  const extension = hasExtension ? name.slice(extensionIndex) : "";
+  const names = new Set(state.tiles.map((tile) => tile.name));
+  let copyNumber = 1;
+  let candidate = `${baseName} copy${extension}`;
+
+  while (names.has(candidate)) {
+    copyNumber += 1;
+    candidate = `${baseName} copy ${copyNumber}${extension}`;
+  }
+  return candidate;
+}
+
+function cloneSelectedTile() {
+  const tile = selectedTile();
+  if (!tile) return;
+  const image = new Image();
+  image.onload = () => {
+    const clone = {
+      id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `tile-${Date.now()}-${tileCounter}`,
+      name: uniqueTileName(tile.name),
+      url: tile.url,
+      image,
+      width: tile.width,
+      height: tile.height,
+      bounds: tile.bounds ? { ...tile.bounds } : null
+    };
+    tileCounter += 1;
+    state.tiles.push(clone);
+    state.selectedTileId = clone.id;
+    renderPalette();
+    updateStats();
+    setStatus(`Cloned ${tile.name} as ${clone.name}.`);
+  };
+  image.src = tile.url;
+}
+
+function renameSelectedTile() {
+  const tile = selectedTile();
+  if (!tile) return;
+  const nextName = els.paletteTileName.value.trim();
+  if (!nextName) {
+    els.paletteTileName.value = tile.name;
+    setStatus("Enter a name before renaming the tile.");
+    return;
+  }
+  const previousName = tile.name;
+  tile.name = nextName;
+  renderPalette();
+  updateStats();
+  setStatus(`Renamed ${previousName} to ${tile.name}.`);
 }
 
 function deleteSelectedTile() {
@@ -1347,6 +1410,13 @@ els.themeToggle.addEventListener("click", () => {
 els.exportButton.addEventListener("click", exportSpritesheet);
 els.exportMapButton.addEventListener("click", exportMapImage);
 els.exportCols.addEventListener("change", updateExportColumns);
+els.cloneTile.addEventListener("click", cloneSelectedTile);
+els.renameTile.addEventListener("click", renameSelectedTile);
+els.paletteTileName.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  renameSelectedTile();
+});
 els.recropTile.addEventListener("click", recropSelectedTile);
 els.rotateTileLeft.addEventListener("click", () => transformSelectedTile("rotate-left", "Rotated left"));
 els.rotateTileRight.addEventListener("click", () => transformSelectedTile("rotate-right", "Rotated right"));

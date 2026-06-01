@@ -337,7 +337,7 @@ test("organizes the workflow into separate project, import, palette, place, and 
   await expect(page.locator("#exportPlacedCount")).toHaveText("1");
 });
 
-test("manages palette tiles with transforms, re-cropping, recolor, transparency, and delete", async ({ page }) => {
+test("manages palette tiles with clone, rename, transforms, re-cropping, recolor, transparency, and delete", async ({ page }) => {
   await openApp(page);
   await setProject(page);
   await addTile(page, "red.png", pngs.red);
@@ -347,28 +347,46 @@ test("manages palette tiles with transforms, re-cropping, recolor, transparency,
   await selectControlTab(page, "3. Palette");
   await expect(page.locator(".manager-tile-card")).toHaveCount(1);
   await expect(page.locator("#paletteSelectedName")).toHaveText("red.png (64x32)");
+  const editorColumns = await page.locator(".palette-editor-layout").evaluate((layout) => {
+    const preview = layout.querySelector(".palette-editor-preview-column").getBoundingClientRect();
+    const controls = layout.querySelector(".palette-editor-controls").getBoundingClientRect();
+    return { previewTop: preview.top, previewRight: preview.right, controlsTop: controls.top, controlsLeft: controls.left };
+  });
+  expect(Math.abs(editorColumns.previewTop - editorColumns.controlsTop)).toBeLessThan(2);
+  expect(editorColumns.controlsLeft).toBeGreaterThanOrEqual(editorColumns.previewRight);
+
+  await page.locator("#paletteTileName").fill("hero.png");
+  await page.getByRole("button", { name: "Rename Tile" }).click();
+  await expect(page.locator("#projectStatus")).toHaveText("Renamed red.png to hero.png.");
+  await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (64x32)");
+
+  await page.getByRole("button", { name: "Clone Tile" }).click();
+  await expect(page.locator(".manager-tile-card")).toHaveCount(2);
+  await expect(page.locator("#projectStatus")).toHaveText("Cloned hero.png as hero copy.png.");
+  await expect(page.locator("#paletteTileName")).toHaveValue("hero copy.png");
+  await page.locator(".manager-tile-card").filter({ hasText: "hero.png" }).click();
 
   await page.getByRole("button", { name: "Rotate Right" }).click();
-  await expect(page.locator("#projectStatus")).toHaveText("Rotated right red.png.");
-  await expect(page.locator("#paletteSelectedName")).toHaveText("red.png (32x64)");
+  await expect(page.locator("#projectStatus")).toHaveText("Rotated right hero.png.");
+  await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (32x64)");
   await page.getByRole("button", { name: "Rotate Left" }).click();
-  await expect(page.locator("#paletteSelectedName")).toHaveText("red.png (64x32)");
+  await expect(page.locator("#paletteSelectedName")).toHaveText("hero.png (64x32)");
   await page.getByRole("button", { name: "Flip Horizontal" }).click();
-  await expect(page.locator("#projectStatus")).toHaveText("Flipped horizontally red.png.");
+  await expect(page.locator("#projectStatus")).toHaveText("Flipped horizontally hero.png.");
   await page.getByRole("button", { name: "Flip Vertical" }).click();
-  await expect(page.locator("#projectStatus")).toHaveText("Flipped vertically red.png.");
+  await expect(page.locator("#projectStatus")).toHaveText("Flipped vertically hero.png.");
 
   await page.getByRole("button", { name: "Re-crop" }).click();
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
   await page.getByRole("button", { name: "Add Tile" }).click();
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", false);
-  await expect(page.locator(".manager-tile-card")).toHaveCount(1);
-  await expect(page.locator("#projectStatus")).toHaveText("Updated red.png at 64x32.");
+  await expect(page.locator(".manager-tile-card")).toHaveCount(2);
+  await expect(page.locator("#projectStatus")).toHaveText("Updated hero.png at 64x32.");
 
   await page.locator("#tileTintColor").fill("#0000ff");
   await page.locator("#tileTintStrength").fill("100");
   await page.getByRole("button", { name: "Apply Tint" }).click();
-  await expect(page.locator("#projectStatus")).toHaveText("Applied 100% tint to red.png.");
+  await expect(page.locator("#projectStatus")).toHaveText("Applied 100% tint to hero.png.");
   let sample = await page.locator("#palettePreview").evaluate(async (image) => {
     await image.decode();
     const canvas = document.createElement("canvas");
@@ -382,7 +400,7 @@ test("manages palette tiles with transforms, re-cropping, recolor, transparency,
 
   await page.locator("#transparentTileColor").fill("#0000ff");
   await page.getByRole("button", { name: "Make Transparent" }).click();
-  await expect(page.locator("#projectStatus")).toHaveText("Made 2048 pixels transparent in red.png.");
+  await expect(page.locator("#projectStatus")).toHaveText("Made 2048 pixels transparent in hero.png.");
   sample = await page.locator("#palettePreview").evaluate(async (image) => {
     await image.decode();
     const canvas = document.createElement("canvas");
@@ -394,6 +412,9 @@ test("manages palette tiles with transforms, re-cropping, recolor, transparency,
   });
   expect(sample[3]).toBe(0);
 
+  await page.getByRole("button", { name: "Delete Tile" }).click();
+  await expect(page.locator(".manager-tile-card")).toHaveCount(1);
+  await expect(page.locator("#placedCount")).toHaveText("0");
   await page.getByRole("button", { name: "Delete Tile" }).click();
   await expect(page.locator(".manager-tile-card")).toHaveCount(0);
   await expect(page.locator("#placedCount")).toHaveText("0");

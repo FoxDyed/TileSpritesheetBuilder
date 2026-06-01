@@ -171,7 +171,8 @@ input {
 }
 
 .palette-manager-layout {
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  grid-template-columns: minmax(240px, 0.7fr) minmax(620px, 1.3fr);
+  width: min(100%, 1240px);
 }
 
 .project-layout {
@@ -273,6 +274,7 @@ label {
 }
 
 input[type="number"],
+input[type="text"],
 input[type="range"],
 input[type="color"],
 select {
@@ -280,6 +282,7 @@ select {
 }
 
 input[type="number"],
+input[type="text"],
 select {
   width: 100%;
   padding: 9px 10px;
@@ -299,6 +302,7 @@ input[type="color"] {
 }
 
 input[type="number"]:focus,
+input[type="text"]:focus,
 input[type="range"]:focus,
 input[type="color"]:focus,
 select:focus,
@@ -456,6 +460,27 @@ button:disabled {
 
 .palette-preview img.has-tile {
   display: block;
+}
+
+.palette-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.78fr) minmax(0, 1.22fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.palette-editor-preview-column,
+.palette-editor-controls {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.palette-rename-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
 }
 
 .palette-edit-grid {
@@ -755,6 +780,12 @@ button:disabled {
   padding: 7px 8px;
 }
 
+@media (max-width: 1040px) {
+  .palette-manager-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 860px) {
   body {
     display: block;
@@ -803,6 +834,10 @@ button:disabled {
   .import-layout,
   .palette-manager-layout,
   .export-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .palette-editor-layout {
     grid-template-columns: 1fr;
   }
 
@@ -907,6 +942,7 @@ button:disabled {
   }
 
   input[type="number"],
+  input[type="text"],
   select {
     padding: 7px 8px;
   }

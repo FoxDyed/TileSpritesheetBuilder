@@ -116,46 +116,60 @@
           </section>
           <section class="feature-panel palette-editor-panel">
             <h3>Selected Sprite</h3>
-            <div class="palette-preview">
-              <img id="palettePreview" alt="">
-            </div>
-            <p id="paletteSelectedName" class="status-text">Select a sprite to edit.</p>
-            <div class="palette-edit-grid" role="group" aria-label="Palette sprite transforms">
-              <button id="recropTile" class="secondary-button" type="button">Re-crop</button>
-              <button id="rotateTileLeft" class="secondary-button" type="button">Rotate Left</button>
-              <button id="rotateTileRight" class="secondary-button" type="button">Rotate Right</button>
-              <button id="flipTileHorizontal" class="secondary-button" type="button">Flip Horizontal</button>
-              <button id="flipTileVertical" class="secondary-button" type="button">Flip Vertical</button>
-              <button id="deleteTile" class="danger-button" type="button">Delete Tile</button>
-            </div>
-            <fieldset class="palette-tool-group">
-              <legend>Minimal recolor</legend>
-              <div class="palette-color-tools">
-                <label>
-                  Tint color
-                  <input id="tileTintColor" type="color" value="#ffffff">
-                </label>
-                <label>
-                  Strength %
-                  <input id="tileTintStrength" type="number" min="0" max="100" value="20">
-                </label>
-                <button id="applyTileTint" class="secondary-button" type="button">Apply Tint</button>
+            <div class="palette-editor-layout">
+              <div class="palette-editor-preview-column">
+                <div class="palette-preview">
+                  <img id="palettePreview" alt="">
+                </div>
+                <p id="paletteSelectedName" class="status-text">Select a sprite to edit.</p>
               </div>
-            </fieldset>
-            <fieldset class="palette-tool-group">
-              <legend>Transparency</legend>
-              <div class="palette-color-tools">
-                <label>
-                  Remove color
-                  <input id="transparentTileColor" type="color" value="#ffffff">
-                </label>
-                <label>
-                  Tolerance
-                  <input id="transparentTileTolerance" type="number" min="0" max="255" value="0">
-                </label>
-                <button id="makeTileColorTransparent" class="secondary-button" type="button">Make Transparent</button>
+              <div class="palette-editor-controls">
+                <div class="palette-rename-tools">
+                  <label>
+                    Sprite name
+                    <input id="paletteTileName" type="text" maxlength="120">
+                  </label>
+                  <button id="renameTile" class="secondary-button" type="button">Rename Tile</button>
+                </div>
+                <div class="palette-edit-grid" role="group" aria-label="Palette sprite transforms">
+                  <button id="cloneTile" class="secondary-button" type="button">Clone Tile</button>
+                  <button id="recropTile" class="secondary-button" type="button">Re-crop</button>
+                  <button id="rotateTileLeft" class="secondary-button" type="button">Rotate Left</button>
+                  <button id="rotateTileRight" class="secondary-button" type="button">Rotate Right</button>
+                  <button id="flipTileHorizontal" class="secondary-button" type="button">Flip Horizontal</button>
+                  <button id="flipTileVertical" class="secondary-button" type="button">Flip Vertical</button>
+                  <button id="deleteTile" class="danger-button" type="button">Delete Tile</button>
+                </div>
+                <fieldset class="palette-tool-group">
+                  <legend>Minimal recolor</legend>
+                  <div class="palette-color-tools">
+                    <label>
+                      Tint color
+                      <input id="tileTintColor" type="color" value="#ffffff">
+                    </label>
+                    <label>
+                      Strength %
+                      <input id="tileTintStrength" type="number" min="0" max="100" value="20">
+                    </label>
+                    <button id="applyTileTint" class="secondary-button" type="button">Apply Tint</button>
+                  </div>
+                </fieldset>
+                <fieldset class="palette-tool-group">
+                  <legend>Transparency</legend>
+                  <div class="palette-color-tools">
+                    <label>
+                      Remove color
+                      <input id="transparentTileColor" type="color" value="#ffffff">
+                    </label>
+                    <label>
+                      Tolerance
+                      <input id="transparentTileTolerance" type="number" min="0" max="255" value="0">
+                    </label>
+                    <button id="makeTileColorTransparent" class="secondary-button" type="button">Make Transparent</button>
+                  </div>
+                </fieldset>
               </div>
-            </fieldset>
+            </div>
           </section>
         </div>
       </section>
