@@ -793,16 +793,17 @@ test("auto crops visible pixels with optional padding and keeps the result edita
   await expect(page.locator("#cropHeight")).toHaveValue("52");
   await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 64x52px (1x locked)");
   await expect(page.locator("#projectStatus")).toHaveText(
-    "Auto crop set to 64x52 with 16px anchor padding and 0px extra padding."
+    "Auto crop set to 64x52 with 16px X / 16px Y anchor padding and 0px X / 0px Y extra padding."
   );
 
-  await page.locator("#cropPadding").fill("3");
+  await page.locator("#cropPaddingX").fill("3");
+  await page.locator("#cropPaddingY").fill("5");
   await page.getByRole("button", { name: "Auto Crop Visible Pixels" }).click();
   await expect(page.locator("#cropWidth")).toHaveValue("64");
-  await expect(page.locator("#cropHeight")).toHaveValue("58");
-  await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 64x58px (1x locked)");
+  await expect(page.locator("#cropHeight")).toHaveValue("62");
+  await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 64x62px (1x locked)");
   await expect(page.locator("#projectStatus")).toHaveText(
-    "Auto crop set to 64x58 with 16px anchor padding and 3px extra padding."
+    "Auto crop set to 64x62 with 16px X / 16px Y anchor padding and 3px X / 5px Y extra padding."
   );
 
   await page.getByRole("button", { name: "Add Tile" }).click();
@@ -817,12 +818,12 @@ test("auto crops visible pixels with optional padding and keeps the result edita
       width: image.naturalWidth,
       height: image.naturalHeight,
       paddingSample: [...ctx.getImageData(1, 1, 1, 1).data],
-      visibleSample: [...ctx.getImageData(22, 19, 1, 1).data]
+      visibleSample: [...ctx.getImageData(22, 21, 1, 1).data]
     };
   });
 
   expect(inspected.width).toBe(64);
-  expect(inspected.height).toBe(58);
+  expect(inspected.height).toBe(62);
   expect(inspected.paddingSample[3]).toBe(0);
   expect(inspected.visibleSample[2]).toBeGreaterThan(inspected.visibleSample[0]);
   expect(inspected.visibleSample[3]).toBe(255);
@@ -855,7 +856,14 @@ test("uses the crop diamond overlay as the placement anchor for oversized sprite
   await expect(page.locator(".crop-guide-description")).toHaveText(
     "The diamond overlay is the grid tile anchor. Drag or nudge the sprite around it to control how oversized art sits on the map."
   );
+  await page.locator("#cropWidth").fill("120");
+  await page.locator("#cropHeight").fill("140");
+  await page.getByRole("button", { name: "Apply Size" }).click();
   await page.getByRole("button", { name: "Add Tile" }).click();
+  await expect(page.locator("#cropDialog")).toHaveJSProperty("open", false);
+  await expect(page.locator(".tile-card")).toHaveCount(1);
+  await expect(page.evaluate(() => window.__tileBuilderDebug.getState().tiles[0].anchor))
+    .resolves.toEqual({ x: 60, y: 70 });
   await selectControlTab(page, "4. Place");
   await clickCell(page, 1, 1);
   await clickExport(page, "Export Map PNG");
@@ -876,14 +884,12 @@ test("uses the crop diamond overlay as the placement anchor for oversized sprite
     const centerX = pad + (state.rows - 1) * state.tileWidth / 2 + state.tileWidth / 2;
     const centerY = pad + state.tileHeight / 2 + (1 + 1) * state.tileHeight / 2;
     return {
-      aligned: [...ctx.getImageData(centerX, centerY - 1, 1, 1).data],
-      belowGuide: [...ctx.getImageData(centerX, centerY + state.tileHeight / 2 - 1, 1, 1).data]
+      aligned: [...ctx.getImageData(centerX, centerY - 1, 1, 1).data]
     };
   }, exported.href);
 
   expect(inspected.aligned[2]).toBeGreaterThan(inspected.aligned[0]);
   expect(inspected.aligned[3]).toBe(255);
-  expect(inspected.belowGuide[3]).toBe(0);
 });
 
 test("exports placed tiles as a Y-then-X sorted packed PNG", async ({ page }) => {

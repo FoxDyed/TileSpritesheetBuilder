@@ -91,7 +91,8 @@ const els = {
   cropCanvas: document.querySelector("#cropCanvas"),
   cropWidth: document.querySelector("#cropWidth"),
   cropHeight: document.querySelector("#cropHeight"),
-  cropPadding: document.querySelector("#cropPadding"),
+  cropPaddingX: document.querySelector("#cropPaddingX"),
+  cropPaddingY: document.querySelector("#cropPaddingY"),
   applyCropSize: document.querySelector("#applyCropSize"),
   autoCropVisible: document.querySelector("#autoCropVisible"),
   cropScaleMode: document.querySelector("#cropScaleMode"),
@@ -905,9 +906,9 @@ function visibleImageBounds(image) {
   return visiblePixelBounds(imageToCanvas(image));
 }
 
-function expandedCropBounds(bounds, padding) {
-  const width = Math.min(2048, Math.max(bounds.width + padding * 2, state.tileWidth));
-  const height = Math.min(2048, Math.max(bounds.height + padding * 2, state.tileHeight));
+function expandedCropBounds(bounds, paddingX, paddingY) {
+  const width = Math.min(2048, Math.max(bounds.width + paddingX * 2, state.tileWidth));
+  const height = Math.min(2048, Math.max(bounds.height + paddingY * 2, state.tileHeight));
   return {
     x: bounds.x - Math.floor((width - bounds.width) / 2),
     y: bounds.y - Math.floor((height - bounds.height) / 2),
@@ -917,7 +918,10 @@ function expandedCropBounds(bounds, padding) {
 }
 
 function anchorCropPadding() {
-  return Math.max(8, Math.ceil(Math.max(state.tileWidth / 4, state.tileHeight / 2)));
+  return {
+    x: Math.max(8, Math.ceil(state.tileWidth / 4)),
+    y: Math.max(8, Math.ceil(state.tileHeight / 2))
+  };
 }
 
 async function importSpritesheet(file) {
@@ -1010,7 +1014,8 @@ function openCropEditor({ file, image, sourceUrl = null, editTileId = null, outp
   els.cropTitle.textContent = file.name;
   els.cropWidth.value = cropState.outputWidth;
   els.cropHeight.value = cropState.outputHeight;
-  els.cropPadding.value = 0;
+  els.cropPaddingX.value = 0;
+  els.cropPaddingY.value = 0;
   els.setCrop.disabled = false;
   els.saveCrop.disabled = false;
   setupCropCanvas();
@@ -1087,10 +1092,16 @@ function autoCropVisiblePixels() {
     return;
   }
 
-  const extraPadding = clampNumber(els.cropPadding.value, 0, 256, 0);
+  const extraPaddingX = clampNumber(els.cropPaddingX.value, 0, 256, 0);
+  const extraPaddingY = clampNumber(els.cropPaddingY.value, 0, 256, 0);
   const anchorPadding = anchorCropPadding();
-  els.cropPadding.value = extraPadding;
-  const bounds = expandedCropBounds(cropState.sourceBounds, anchorPadding + extraPadding);
+  els.cropPaddingX.value = extraPaddingX;
+  els.cropPaddingY.value = extraPaddingY;
+  const bounds = expandedCropBounds(
+    cropState.sourceBounds,
+    anchorPadding.x + extraPaddingX,
+    anchorPadding.y + extraPaddingY
+  );
   setCropWindowSize(bounds.width, bounds.height);
   cropState.scaleMode = "1";
   cropState.scale = cropScaleForMode("1");
@@ -1099,7 +1110,7 @@ function autoCropVisiblePixels() {
   updateCropZoomRange();
   syncCropControls();
   drawCrop();
-  setStatus(`Auto crop set to ${bounds.width}x${bounds.height} with ${anchorPadding}px anchor padding and ${extraPadding}px extra padding.`);
+  setStatus(`Auto crop set to ${bounds.width}x${bounds.height} with ${anchorPadding.x}px X / ${anchorPadding.y}px Y anchor padding and ${extraPaddingX}px X / ${extraPaddingY}px Y extra padding.`);
 }
 
 function centerCropImage() {
@@ -1186,7 +1197,7 @@ function drawCrop() {
 function cropAnchor(width = cropState.outputWidth, height = cropState.outputHeight) {
   return {
     x: width / 2,
-    y: height - state.tileHeight / 2
+    y: height / 2
   };
 }
 

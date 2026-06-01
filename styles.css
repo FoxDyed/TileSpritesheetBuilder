@@ -778,7 +778,7 @@ button:disabled {
 
 .crop-size-tools {
   display: grid;
-  grid-template-columns: repeat(3, minmax(76px, 1fr)) auto minmax(172px, auto);
+  grid-template-columns: repeat(4, minmax(76px, 1fr)) auto minmax(172px, auto);
   align-items: end;
   gap: 12px;
 }
