@@ -905,12 +905,19 @@ function visibleImageBounds(image) {
   return visiblePixelBounds(imageToCanvas(image));
 }
 
-function paddedBounds(bounds, padding, maxWidth, maxHeight) {
-  const x = Math.max(0, bounds.x - padding);
-  const y = Math.max(0, bounds.y - padding);
-  const right = Math.min(maxWidth, bounds.x + bounds.width + padding);
-  const bottom = Math.min(maxHeight, bounds.y + bounds.height + padding);
-  return { x, y, width: right - x, height: bottom - y };
+function expandedCropBounds(bounds, padding) {
+  const width = Math.min(2048, Math.max(bounds.width + padding * 2, state.tileWidth));
+  const height = Math.min(2048, Math.max(bounds.height + padding * 2, state.tileHeight));
+  return {
+    x: bounds.x - Math.floor((width - bounds.width) / 2),
+    y: bounds.y - Math.floor((height - bounds.height) / 2),
+    width,
+    height
+  };
+}
+
+function anchorCropPadding() {
+  return Math.max(8, Math.ceil(Math.max(state.tileWidth / 4, state.tileHeight / 2)));
 }
 
 async function importSpritesheet(file) {
@@ -1080,9 +1087,10 @@ function autoCropVisiblePixels() {
     return;
   }
 
-  const padding = clampNumber(els.cropPadding.value, 0, 256, 0);
-  els.cropPadding.value = padding;
-  const bounds = paddedBounds(cropState.sourceBounds, padding, cropState.image.width, cropState.image.height);
+  const extraPadding = clampNumber(els.cropPadding.value, 0, 256, 0);
+  const anchorPadding = anchorCropPadding();
+  els.cropPadding.value = extraPadding;
+  const bounds = expandedCropBounds(cropState.sourceBounds, anchorPadding + extraPadding);
   setCropWindowSize(bounds.width, bounds.height);
   cropState.scaleMode = "1";
   cropState.scale = cropScaleForMode("1");
@@ -1091,7 +1099,7 @@ function autoCropVisiblePixels() {
   updateCropZoomRange();
   syncCropControls();
   drawCrop();
-  setStatus(`Auto crop set to ${bounds.width}x${bounds.height} with ${padding}px padding.`);
+  setStatus(`Auto crop set to ${bounds.width}x${bounds.height} with ${anchorPadding}px anchor padding and ${extraPadding}px extra padding.`);
 }
 
 function centerCropImage() {

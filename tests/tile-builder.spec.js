@@ -788,12 +788,22 @@ test("auto crops visible pixels with optional padding and keeps the result edita
   });
 
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
+  await page.getByRole("button", { name: "Auto Crop Visible Pixels" }).click();
+  await expect(page.locator("#cropWidth")).toHaveValue("64");
+  await expect(page.locator("#cropHeight")).toHaveValue("52");
+  await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 64x52px (1x locked)");
+  await expect(page.locator("#projectStatus")).toHaveText(
+    "Auto crop set to 64x52 with 16px anchor padding and 0px extra padding."
+  );
+
   await page.locator("#cropPadding").fill("3");
   await page.getByRole("button", { name: "Auto Crop Visible Pixels" }).click();
-  await expect(page.locator("#cropWidth")).toHaveValue("26");
-  await expect(page.locator("#cropHeight")).toHaveValue("26");
-  await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 26x26px (1x locked)");
-  await expect(page.locator("#projectStatus")).toHaveText("Auto crop set to 26x26 with 3px padding.");
+  await expect(page.locator("#cropWidth")).toHaveValue("64");
+  await expect(page.locator("#cropHeight")).toHaveValue("58");
+  await expect(page.locator("#cropSourceInfo")).toHaveText("Crop source: 64x58px (1x locked)");
+  await expect(page.locator("#projectStatus")).toHaveText(
+    "Auto crop set to 64x58 with 16px anchor padding and 3px extra padding."
+  );
 
   await page.getByRole("button", { name: "Add Tile" }).click();
   const inspected = await page.locator(".tile-card img").evaluate(async (image) => {
@@ -807,12 +817,12 @@ test("auto crops visible pixels with optional padding and keeps the result edita
       width: image.naturalWidth,
       height: image.naturalHeight,
       paddingSample: [...ctx.getImageData(1, 1, 1, 1).data],
-      visibleSample: [...ctx.getImageData(3, 3, 1, 1).data]
+      visibleSample: [...ctx.getImageData(22, 19, 1, 1).data]
     };
   });
 
-  expect(inspected.width).toBe(26);
-  expect(inspected.height).toBe(26);
+  expect(inspected.width).toBe(64);
+  expect(inspected.height).toBe(58);
   expect(inspected.paddingSample[3]).toBe(0);
   expect(inspected.visibleSample[2]).toBeGreaterThan(inspected.visibleSample[0]);
   expect(inspected.visibleSample[3]).toBe(255);

@@ -11,7 +11,7 @@ Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
 - Upload one or more PNG files.
 - Crop each incoming PNG with a custom, draggable crop window.
 - Set an intermediate crop and continue refining it before adding the tile to the palette.
-- Auto-crop transparent margins with optional padding while keeping the result editable.
+- Auto-crop transparent margins with anchor workspace and optional extra padding while keeping the result editable.
 - Lock crop source scale and nudge or drag tall or wide source images before
   cropping.
 - Align manually cropped sprites against a grid-diamond overlay so oversized art keeps its intended map anchor.
