@@ -20,6 +20,7 @@ Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
 - Keep palette tiles when project settings change, and save or load a palette as a portable JSON file.
 - Save or load a complete project JSON file with settings, palette sprites, layers, and placements.
 - Paint layered isometric maps, rename or reorder layers, and move placed tiles between empty grid cells.
+- Select multiple placements on the active layer and move them together while preserving their relative positions.
 - Preview the currently selected or moving tile while working in the placement grid.
 - Place cropped tiles onto a custom isometric diamond grid.
 - Erase or replace placed tiles.

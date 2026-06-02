@@ -762,6 +762,49 @@ test("drop mode moves placed tiles only into empty grid cells", async ({ page })
   expect(inspected.second[2]).toBeGreaterThan(inspected.second[0]);
 });
 
+test("moves a selected tile group together and restores it when the destination leaves the grid", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 4, rows: 3, tileWidth: 64, tileHeight: 32 });
+  await addTile(page, "red.png", pngs.red);
+  await addTile(page, "blue.png", pngs.blue);
+
+  await page.locator(".tile-card", { hasText: "red.png" }).click();
+  await clickCell(page, 0, 0);
+  await page.locator(".tile-card", { hasText: "blue.png" }).click();
+  await clickCell(page, 1, 0);
+
+  await page.getByRole("button", { name: "Select Group" }).click();
+  await clickCell(page, 0, 0);
+  await clickCell(page, 1, 0);
+  await expect(page.locator("#groupSelectionInfo")).toHaveText("2 tiles selected.");
+  await expect(page.locator("#selectedTileName")).toHaveText("2 tiles selected");
+  await page.getByRole("button", { name: "Move Selected" }).click();
+  await expect(page.locator("#groupSelectionInfo")).toHaveText("Moving 2 selected tiles. Click a new anchor cell.");
+  await clickCell(page, 1, 1);
+  await expect(page.locator("#projectStatus")).toHaveText("Moved 2 tiles together.");
+  await expect(page.locator("#groupSelectionInfo")).toHaveText("No group selected.");
+  await expect(page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].placements))
+    .resolves.toEqual([
+      expect.objectContaining({ x: 1, y: 1 }),
+      expect.objectContaining({ x: 2, y: 1 })
+    ]);
+
+  await clickCell(page, 1, 1);
+  await clickCell(page, 2, 1);
+  await page.getByRole("button", { name: "Move Selected" }).click();
+  await clickCell(page, 3, 1);
+  await expect(page.locator("#projectStatus")).toHaveText(
+    "Group move canceled. The selected tiles were restored because part of the group would leave the grid."
+  );
+  await expect(page.locator("#groupSelectionInfo")).toHaveText("No group selected.");
+  await expect(page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].placements))
+    .resolves.toEqual([
+      expect.objectContaining({ x: 1, y: 1 }),
+      expect.objectContaining({ x: 2, y: 1 })
+    ]);
+  await expect(page.evaluate(() => window.__tileBuilderDebug.getState().groupMoveOrigin)).resolves.toBeNull();
+});
+
 test("locks crop source scale and nudges to the bottom half of a tall PNG", async ({ page }) => {
   await openApp(page);
   await setProject(page, { cols: 2, rows: 2, tileWidth: 128, tileHeight: 128, exportCols: 1 });

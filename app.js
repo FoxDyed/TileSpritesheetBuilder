@@ -19,6 +19,8 @@ const state = {
   ],
   activeLayerId: "layer-1",
   pickedPlacement: null,
+  groupSelection: [],
+  groupMoveOrigin: null,
   hoverCell: null,
   viewerScale: 1,
   userSetViewerScale: false
@@ -66,6 +68,10 @@ const els = {
   paintTool: document.querySelector("#paintTool"),
   dropTool: document.querySelector("#dropTool"),
   eraseTool: document.querySelector("#eraseTool"),
+  groupMoveTool: document.querySelector("#groupMoveTool"),
+  groupSelectionInfo: document.querySelector("#groupSelectionInfo"),
+  moveSelectedGroup: document.querySelector("#moveSelectedGroup"),
+  cancelGroupMove: document.querySelector("#cancelGroupMove"),
   clearGrid: document.querySelector("#clearGrid"),
   themeToggle: document.querySelector("#themeToggle"),
   exportButton: document.querySelector("#exportButton"),
@@ -201,6 +207,21 @@ function clearPickedPlacement() {
   state.pickedPlacement = null;
 }
 
+function clearGroupSelection() {
+  state.groupSelection = [];
+  state.groupMoveOrigin = null;
+}
+
+function setGridTool(tool) {
+  if (!["paint", "drop", "erase", "group"].includes(tool)) return;
+  state.tool = tool;
+  clearPickedPlacement();
+  if (tool !== "group") clearGroupSelection();
+  updateToolButtons();
+  renderGrid();
+  updateStats();
+}
+
 function readSettings() {
   return {
     cols: clampNumber(els.gridCols.value, 1, 64, state.cols),
@@ -230,6 +251,7 @@ function applySettings() {
   const gridChanged = next.cols !== state.cols || next.rows !== state.rows;
 
   Object.assign(state, next);
+  clearGroupSelection();
   syncSettingsControls();
 
   if (gridChanged || gridScaleChanged) {
@@ -362,6 +384,29 @@ function tileDrawRect(tile, cell) {
   };
 }
 
+function groupMoveCandidates(targetCell) {
+  if (!state.groupMoveOrigin || !targetCell) return [];
+  const offsetX = targetCell.x - state.groupMoveOrigin.anchorX;
+  const offsetY = targetCell.y - state.groupMoveOrigin.anchorY;
+  return state.groupMoveOrigin.placements.map((placement) => ({
+    ...placement,
+    x: placement.x + offsetX,
+    y: placement.y + offsetY
+  }));
+}
+
+function canPlaceGroup(candidates) {
+  if (!state.groupMoveOrigin || candidates.length === 0) return false;
+  const layer = state.layers.find((item) => item.id === state.groupMoveOrigin.layerId);
+  if (!layer) return false;
+  const selectedKeys = new Set(state.groupMoveOrigin.placements.map((placement) => placement.key));
+  return candidates.every((placement) => {
+    if (placement.x < 0 || placement.y < 0 || placement.x >= state.cols || placement.y >= state.rows) return false;
+    const occupied = layer.placements.get(placementKey(placement.x, placement.y));
+    return !occupied || selectedKeys.has(placementKey(placement.x, placement.y));
+  });
+}
+
 function renderGrid() {
   gridCtx.clearRect(0, 0, els.gridCanvas.width, els.gridCanvas.height);
   gridCtx.fillStyle = cssVar("--canvas-bg");
@@ -388,6 +433,19 @@ function renderGrid() {
       const rect = tileDrawRect(tile, placement);
       gridCtx.drawImage(tile.image, rect.x, rect.y, rect.width, rect.height);
     }
+  }
+
+  const selectedPlacements = state.groupMoveOrigin && state.hoverCell
+    ? groupMoveCandidates(state.hoverCell)
+    : state.groupSelection;
+  const selectionValid = !state.groupMoveOrigin || !state.hoverCell || canPlaceGroup(selectedPlacements);
+  for (const placement of selectedPlacements) {
+    if (placement.x < 0 || placement.y < 0 || placement.x >= state.cols || placement.y >= state.rows) continue;
+    drawDiamond(gridCtx, placement.x, placement.y, {
+      stroke: selectionValid ? cssVar("--accent") : "#a23226",
+      lineWidth: 3,
+      fill: cssVar("--grid-hover")
+    });
   }
 }
 
@@ -468,6 +526,9 @@ function updatePaletteEditor() {
 }
 
 function selectedTileLabel() {
+  if (state.groupSelection.length > 0) {
+    return state.groupMoveOrigin ? `Moving ${state.groupSelection.length} tiles` : `${state.groupSelection.length} tiles selected`;
+  }
   if (state.pickedPlacement) {
     const tile = state.tiles.find((item) => item.id === state.pickedPlacement.tileId);
     return tile ? `Moving ${tile.name}` : "Moving tile";
@@ -485,7 +546,9 @@ function updatePlacementPreview() {
   els.placementPreview.src = tile ? tile.url : "";
   els.placementPreview.alt = tile ? `${tile.name} placement preview` : "";
   els.placementPreviewEmpty.hidden = Boolean(tile);
-  els.placementPreviewName.textContent = tile ? `${moving ? "Moving " : ""}${tile.name}` : "None selected.";
+  els.placementPreviewName.textContent = state.groupSelection.length > 0
+    ? `${state.groupMoveOrigin ? "Moving" : "Selected"} ${state.groupSelection.length} tiles`
+    : tile ? `${moving ? "Moving " : ""}${tile.name}` : "None selected.";
 }
 
 function renderLayers() {
@@ -543,6 +606,14 @@ function updateToolButtons() {
   els.paintTool.classList.toggle("is-active", state.tool === "paint");
   els.dropTool.classList.toggle("is-active", state.tool === "drop");
   els.eraseTool.classList.toggle("is-active", state.tool === "erase");
+  els.groupMoveTool.classList.toggle("is-active", state.tool === "group");
+  els.groupSelectionInfo.textContent = state.groupMoveOrigin
+    ? `Moving ${state.groupSelection.length} selected tiles. Click a new anchor cell.`
+    : state.groupSelection.length > 0
+      ? `${state.groupSelection.length} tile${state.groupSelection.length === 1 ? "" : "s"} selected.`
+      : "No group selected.";
+  els.moveSelectedGroup.disabled = state.groupSelection.length === 0 || Boolean(state.groupMoveOrigin);
+  els.cancelGroupMove.disabled = state.groupSelection.length === 0;
 }
 
 function updateStats() {
@@ -558,6 +629,7 @@ function updateStats() {
   els.exportGridSize.textContent = gridSize;
   updatePaletteEditor();
   updatePlacementPreview();
+  updateToolButtons();
 }
 
 function viewerScaleLabel() {
@@ -889,6 +961,7 @@ async function loadPalette(file) {
       }
     }
     if (state.pickedPlacement && !ids.has(state.pickedPlacement.tileId)) clearPickedPlacement();
+    clearGroupSelection();
     state.tiles = tiles;
     state.selectedTileId = tiles[0] ? tiles[0].id : null;
     tileCounter += tiles.length;
@@ -988,6 +1061,8 @@ async function loadProject(file) {
       viewerScale,
       userSetViewerScale: viewerScale !== 1,
       pickedPlacement: null,
+      groupSelection: [],
+      groupMoveOrigin: null,
       hoverCell: null
     });
     tileCounter += tiles.length;
@@ -1075,6 +1150,7 @@ function deleteSelectedTile() {
     }
   }
   if (state.pickedPlacement && state.pickedPlacement.tileId === tile.id) clearPickedPlacement();
+  clearGroupSelection();
   state.selectedTileId = state.tiles[0] ? state.tiles[0].id : null;
   renderPalette();
   renderLayers();
@@ -1539,6 +1615,89 @@ function handleGridPointerMove(event) {
   if (changed) renderGrid();
 }
 
+function toggleGroupPlacement(layer, key, placement) {
+  const selectionIndex = state.groupSelection.findIndex((item) => item.layerId === layer.id && item.key === key);
+  if (selectionIndex >= 0) {
+    state.groupSelection.splice(selectionIndex, 1);
+  } else {
+    state.groupSelection.push({ ...placement, key, layerId: layer.id });
+  }
+  renderGrid();
+  updateStats();
+  setStatus(state.groupSelection.length > 0
+    ? `Selected ${state.groupSelection.length} tile${state.groupSelection.length === 1 ? "" : "s"} for a group move.`
+    : "Group selection cleared.");
+}
+
+function beginGroupMove() {
+  if (state.groupSelection.length === 0 || state.groupMoveOrigin) return;
+  const [anchor] = state.groupSelection;
+  state.groupMoveOrigin = {
+    layerId: anchor.layerId,
+    anchorX: anchor.x,
+    anchorY: anchor.y,
+    placements: state.groupSelection.map((placement) => ({ ...placement }))
+  };
+  renderGrid();
+  updateStats();
+  setStatus(`Moving ${state.groupSelection.length} selected tile${state.groupSelection.length === 1 ? "" : "s"}. Click a new anchor cell.`);
+}
+
+function cancelGroupMove(message = "Group selection canceled.") {
+  clearGroupSelection();
+  renderGrid();
+  updateStats();
+  setStatus(message);
+}
+
+function finishGroupMove(targetCell) {
+  const origin = state.groupMoveOrigin;
+  if (!origin) return;
+  const layer = state.layers.find((item) => item.id === origin.layerId);
+  const candidates = groupMoveCandidates(targetCell);
+  const outsideGrid = candidates.some((placement) => {
+    return placement.x < 0 || placement.y < 0 || placement.x >= state.cols || placement.y >= state.rows;
+  });
+  if (!layer || outsideGrid) {
+    cancelGroupMove("Group move canceled. The selected tiles were restored because part of the group would leave the grid.");
+    return;
+  }
+  if (!canPlaceGroup(candidates)) {
+    cancelGroupMove("Group move canceled. The selected tiles were restored because another tile blocks the destination.");
+    return;
+  }
+
+  for (const placement of origin.placements) {
+    layer.placements.delete(placement.key);
+  }
+  for (const placement of candidates) {
+    layer.placements.set(placementKey(placement.x, placement.y), {
+      x: placement.x,
+      y: placement.y,
+      tileId: placement.tileId
+    });
+  }
+  const movedCount = candidates.length;
+  clearGroupSelection();
+  renderGrid();
+  renderLayers();
+  updateStats();
+  setStatus(`Moved ${movedCount} tiles together.`);
+}
+
+function handleGroupMoveClick(cell, layer, key) {
+  if (state.groupMoveOrigin) {
+    finishGroupMove(cell);
+    return;
+  }
+  const placement = layer.placements.get(key);
+  if (!placement) {
+    setStatus("Select placed tiles on the active layer, then choose Move Selected.");
+    return;
+  }
+  toggleGroupPlacement(layer, key, placement);
+}
+
 function handleGridClick(event) {
   const point = canvasPointFromEvent(event);
   const cell = cellFromPoint(point.x, point.y);
@@ -1546,7 +1705,10 @@ function handleGridClick(event) {
 
   const key = placementKey(cell.x, cell.y);
   const layer = activeLayer();
-  if (state.tool === "erase") {
+  if (state.tool === "group") {
+    handleGroupMoveClick(cell, layer, key);
+    return;
+  } else if (state.tool === "erase") {
     layer.placements.delete(key);
     if (state.pickedPlacement && state.pickedPlacement.layerId === layer.id && state.pickedPlacement.key === key) {
       clearPickedPlacement();
@@ -1606,6 +1768,7 @@ function handleGridClick(event) {
 function clearGrid() {
   activeLayer().placements.clear();
   clearPickedPlacement();
+  clearGroupSelection();
   renderGrid();
   renderLayers();
   updateStats();
@@ -1623,6 +1786,7 @@ function addLayer() {
   state.layers.push(layer);
   state.activeLayerId = layer.id;
   clearPickedPlacement();
+  clearGroupSelection();
   renderLayers();
   renderGrid();
   updateStats();
@@ -1639,6 +1803,7 @@ function deleteActiveLayer() {
   state.layers.splice(index, 1);
   state.activeLayerId = state.layers[Math.max(0, index - 1)].id;
   if (state.pickedPlacement && state.pickedPlacement.layerId === layer.id) clearPickedPlacement();
+  clearGroupSelection();
   renderLayers();
   renderGrid();
   updateStats();
@@ -1649,6 +1814,7 @@ function setActiveLayer(layerId) {
   if (!state.layers.some((layer) => layer.id === layerId)) return;
   state.activeLayerId = layerId;
   clearPickedPlacement();
+  clearGroupSelection();
   renderLayers();
   setStatus(`${activeLayer().name} selected.`);
 }
@@ -1827,17 +1993,17 @@ els.paletteFileInput.addEventListener("change", (event) => {
   event.target.value = "";
 });
 els.paintTool.addEventListener("click", () => {
-  state.tool = "paint";
-  updateToolButtons();
+  setGridTool("paint");
 });
 els.dropTool.addEventListener("click", () => {
-  state.tool = "drop";
-  updateToolButtons();
+  setGridTool("drop");
 });
 els.eraseTool.addEventListener("click", () => {
-  state.tool = "erase";
-  updateToolButtons();
+  setGridTool("erase");
 });
+els.groupMoveTool.addEventListener("click", () => setGridTool("group"));
+els.moveSelectedGroup.addEventListener("click", beginGroupMove);
+els.cancelGroupMove.addEventListener("click", () => cancelGroupMove());
 els.clearGrid.addEventListener("click", clearGrid);
 els.themeToggle.addEventListener("click", () => {
   applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
@@ -1949,9 +2115,12 @@ window.__tileBuilderDebug = {
         name: layer.name,
         count: layer.placements.size,
         visible: layer.visible,
-        order
+        order,
+        placements: sortedLayerPlacements(layer)
       })),
       pickedPlacement: state.pickedPlacement,
+      groupSelection: state.groupSelection,
+      groupMoveOrigin: state.groupMoveOrigin,
       selectedTileId: state.selectedTileId,
       tiles: state.tiles.map((tile) => ({
         id: tile.id,

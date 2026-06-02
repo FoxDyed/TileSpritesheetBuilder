@@ -204,6 +204,14 @@
             <button id="dropTool" class="tool-button" type="button">Move</button>
             <button id="eraseTool" class="tool-button" type="button">Erase</button>
           </div>
+          <div class="group-move-panel">
+            <button id="groupMoveTool" class="tool-button" type="button">Select Group</button>
+            <p id="groupSelectionInfo" class="status-text">No group selected.</p>
+            <div class="tool-row layer-control-row" role="group" aria-label="Group move controls">
+              <button id="moveSelectedGroup" class="secondary-button" type="button" disabled>Move Selected</button>
+              <button id="cancelGroupMove" class="secondary-button" type="button" disabled>Cancel Selection</button>
+            </div>
+          </div>
           <div id="palette" class="palette" aria-label="Tile palette"></div>
           <div class="placement-preview-panel">
             <h3>Selected Tile Preview</h3>

@@ -487,6 +487,15 @@ button:disabled {
   background: var(--accent-soft);
 }
 
+.group-move-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
 .status-text {
   min-height: 1.1em;
   margin: 0;
