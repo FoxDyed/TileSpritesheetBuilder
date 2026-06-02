@@ -23,7 +23,17 @@ const state = {
   groupMoveOrigin: null,
   hoverCell: null,
   viewerScale: 1,
-  userSetViewerScale: false
+  userSetViewerScale: false,
+  create: {
+    tileAId: "transparent",
+    tileBId: "",
+    side: "positive",
+    points: [],
+    feather: 6,
+    splatter: 18,
+    noise: 8,
+    drawing: false
+  }
 };
 
 const viewerZoomLevels = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -65,6 +75,19 @@ const els = {
   transparentTileColor: document.querySelector("#transparentTileColor"),
   transparentTileTolerance: document.querySelector("#transparentTileTolerance"),
   makeTileColorTransparent: document.querySelector("#makeTileColorTransparent"),
+  createTileA: document.querySelector("#createTileA"),
+  createTileB: document.querySelector("#createTileB"),
+  createTileName: document.querySelector("#createTileName"),
+  createSideUpper: document.querySelector("#createSideUpper"),
+  createSideLower: document.querySelector("#createSideLower"),
+  createFeather: document.querySelector("#createFeather"),
+  createSplatter: document.querySelector("#createSplatter"),
+  createNoise: document.querySelector("#createNoise"),
+  clearCreateLine: document.querySelector("#clearCreateLine"),
+  loadCreatedTile: document.querySelector("#loadCreatedTile"),
+  addCreatedTile: document.querySelector("#addCreatedTile"),
+  createCanvas: document.querySelector("#createCanvas"),
+  createPreviewStatus: document.querySelector("#createPreviewStatus"),
   paintTool: document.querySelector("#paintTool"),
   dropTool: document.querySelector("#dropTool"),
   eraseTool: document.querySelector("#eraseTool"),
@@ -125,6 +148,7 @@ const els = {
 
 const gridCtx = els.gridCanvas.getContext("2d");
 const cropCtx = els.cropCanvas.getContext("2d");
+const createCtx = els.createCanvas.getContext("2d");
 const pendingFiles = [];
 let cropState = null;
 let tileCounter = 1;
@@ -300,6 +324,7 @@ function applyTheme(theme) {
   localStorage.setItem("tileBuilderTheme", nextTheme);
   renderGrid();
   drawCrop();
+  drawCreatePreview();
 }
 
 function initializeTheme() {
@@ -489,6 +514,7 @@ function renderPalette() {
   renderTileCards(els.paletteManager, "Import PNGs to begin managing your palette.");
   els.savePalette.disabled = state.tiles.length === 0;
   updatePaletteEditor();
+  drawCreatePreview();
 }
 
 function selectedTile() {
@@ -523,6 +549,369 @@ function updatePaletteEditor() {
   els.palettePreview.alt = tile ? `${tile.name} preview` : "";
   els.paletteSelectedName.textContent = tile ? `${tile.name} (${tile.width}x${tile.height})` : "Select a sprite to edit.";
   els.paletteTileName.value = tile ? tile.name : "";
+}
+
+function deserializeTransitionRecipe(recipe) {
+  if (!recipe || typeof recipe !== "object") return null;
+  const points = Array.isArray(recipe.points)
+    ? recipe.points
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({
+          x: Math.min(1, Math.max(0, point.x)),
+          y: Math.min(1, Math.max(0, point.y))
+        }))
+    : [];
+  if (points.length < 2) return null;
+  return {
+    version: 1,
+    tileAId: typeof recipe.tileAId === "string" ? recipe.tileAId : "transparent",
+    tileAName: typeof recipe.tileAName === "string" ? recipe.tileAName : "Transparent background",
+    tileBId: typeof recipe.tileBId === "string" ? recipe.tileBId : "",
+    tileBName: typeof recipe.tileBName === "string" ? recipe.tileBName : "Tile B",
+    side: recipe.side === "negative" ? "negative" : "positive",
+    points,
+    feather: clampNumber(recipe.feather, 0, 64, 6),
+    splatter: clampNumber(recipe.splatter, 0, 100, 18),
+    noise: clampNumber(recipe.noise, 0, 100, 8)
+  };
+}
+
+function createTileOptions(select, includeTransparent) {
+  const previousValue = select.value;
+  select.replaceChildren();
+  if (includeTransparent) {
+    const transparent = document.createElement("option");
+    transparent.value = "transparent";
+    transparent.textContent = "Transparent background";
+    select.append(transparent);
+  }
+  for (const tile of state.tiles) {
+    const option = document.createElement("option");
+    option.value = tile.id;
+    option.textContent = tile.name;
+    select.append(option);
+  }
+  if ([...select.options].some((option) => option.value === previousValue)) {
+    select.value = previousValue;
+  } else if (includeTransparent) {
+    select.value = "transparent";
+  } else if (state.selectedTileId && state.tiles.some((tile) => tile.id === state.selectedTileId)) {
+    select.value = state.selectedTileId;
+  } else {
+    select.value = state.tiles[0] ? state.tiles[0].id : "";
+  }
+}
+
+function syncCreateControlsFromState() {
+  createTileOptions(els.createTileA, true);
+  createTileOptions(els.createTileB, false);
+  if (state.create.tileAId !== "transparent" && !state.tiles.some((tile) => tile.id === state.create.tileAId)) {
+    state.create.tileAId = "transparent";
+  }
+  if (!state.tiles.some((tile) => tile.id === state.create.tileBId)) {
+    state.create.tileBId = state.selectedTileId && state.tiles.some((tile) => tile.id === state.selectedTileId)
+      ? state.selectedTileId
+      : state.tiles[0]?.id || "";
+  }
+  els.createTileA.value = state.create.tileAId;
+  els.createTileB.value = state.create.tileBId;
+  els.createFeather.value = state.create.feather;
+  els.createSplatter.value = state.create.splatter;
+  els.createNoise.value = state.create.noise;
+  els.createSideUpper.classList.toggle("is-active", state.create.side === "negative");
+  els.createSideLower.classList.toggle("is-active", state.create.side === "positive");
+  els.addCreatedTile.disabled = !state.create.tileBId;
+  els.loadCreatedTile.disabled = !selectedTile()?.transition;
+}
+
+function createOutputSize() {
+  const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  const tileA = state.tiles.find((tile) => tile.id === state.create.tileAId);
+  const tile = tileB || tileA;
+  return {
+    width: tile ? tile.width : state.spriteWidth,
+    height: tile ? tile.height : state.spriteHeight
+  };
+}
+
+function defaultCreateLine(width, height) {
+  return [
+    { x: 0, y: height * 0.65 },
+    { x: width, y: height * 0.35 }
+  ];
+}
+
+function createLinePixels(width, height) {
+  const points = state.create.points.length >= 2
+    ? state.create.points.map((point) => ({ x: point.x * width, y: point.y * height }))
+    : defaultCreateLine(width, height);
+  return points.map((point) => ({
+    x: Math.min(width, Math.max(0, point.x)),
+    y: Math.min(height, Math.max(0, point.y))
+  }));
+}
+
+function normalizeCreatePoints(points, width, height) {
+  return points.map((point) => ({
+    x: Math.min(1, Math.max(0, point.x / width)),
+    y: Math.min(1, Math.max(0, point.y / height))
+  }));
+}
+
+function drawTileToCanvas(ctx, tile, width, height) {
+  if (!tile) return;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tile.image, 0, 0, width, height);
+}
+
+function lineOrientation(points) {
+  const first = points[0];
+  const last = points[points.length - 1];
+  return Math.abs(last.x - first.x) >= Math.abs(last.y - first.y) ? "horizontal" : "vertical";
+}
+
+function createMaskCanvas(width, height, points, side, feather) {
+  const mask = document.createElement("canvas");
+  mask.width = width;
+  mask.height = height;
+  const ctx = mask.getContext("2d");
+  const orientation = lineOrientation(points);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+  if (orientation === "horizontal") {
+    if (side === "positive") {
+      ctx.lineTo(width, height);
+      ctx.lineTo(0, height);
+    } else {
+      ctx.lineTo(width, 0);
+      ctx.lineTo(0, 0);
+    }
+  } else if (side === "positive") {
+    ctx.lineTo(width, height);
+    ctx.lineTo(width, 0);
+  } else {
+    ctx.lineTo(0, height);
+    ctx.lineTo(0, 0);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  if (feather > 0) {
+    const blurred = document.createElement("canvas");
+    blurred.width = width;
+    blurred.height = height;
+    const blurCtx = blurred.getContext("2d");
+    blurCtx.filter = `blur(${feather}px)`;
+    blurCtx.drawImage(mask, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(blurred, 0, 0);
+  }
+
+  return mask;
+}
+
+function distanceToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+function distanceToLine(px, py, points) {
+  let distance = Infinity;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    distance = Math.min(distance, distanceToSegment(px, py, a.x, a.y, b.x, b.y));
+  }
+  return distance;
+}
+
+function seededNoise(x, y, seed) {
+  const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function applyMaskEffects(mask, points, splatter, noise) {
+  if (splatter === 0 && noise === 0) return mask;
+  const ctx = mask.getContext("2d");
+  const imageData = ctx.getImageData(0, 0, mask.width, mask.height);
+  const pixels = imageData.data;
+  const splatterRadius = Math.max(1, Math.max(mask.width, mask.height) * 0.18 * (splatter / 100));
+  const seed = points.reduce((sum, point) => sum + point.x * 0.13 + point.y * 0.17, 11);
+
+  for (let y = 0; y < mask.height; y += 1) {
+    for (let x = 0; x < mask.width; x += 1) {
+      const index = (y * mask.width + x) * 4 + 3;
+      let alpha = pixels[index];
+      if (noise > 0 && alpha > 0 && alpha < 255) {
+        alpha += (seededNoise(x, y, seed) - 0.5) * 255 * (noise / 100);
+      }
+      if (splatter > 0 && distanceToLine(x, y, points) <= splatterRadius) {
+        const chance = splatter / 100 * 0.34;
+        if (seededNoise(x, y, seed + 19) < chance) {
+          alpha = seededNoise(x, y, seed + 29) < 0.5 ? 0 : 255;
+        }
+      }
+      pixels[index] = Math.min(255, Math.max(0, Math.round(alpha)));
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return mask;
+}
+
+function buildTransitionCanvas() {
+  const tileA = state.create.tileAId === "transparent" ? null : state.tiles.find((tile) => tile.id === state.create.tileAId);
+  const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  const { width, height } = createOutputSize();
+  const output = document.createElement("canvas");
+  output.width = width;
+  output.height = height;
+  const outputCtx = output.getContext("2d");
+  outputCtx.clearRect(0, 0, width, height);
+  drawTileToCanvas(outputCtx, tileA, width, height);
+
+  if (!tileB) return output;
+  const points = createLinePixels(width, height);
+  const mask = applyMaskEffects(
+    createMaskCanvas(width, height, points, state.create.side, state.create.feather),
+    points,
+    state.create.splatter,
+    state.create.noise
+  );
+  const overlay = document.createElement("canvas");
+  overlay.width = width;
+  overlay.height = height;
+  const overlayCtx = overlay.getContext("2d");
+  drawTileToCanvas(overlayCtx, tileB, width, height);
+
+  const overlayData = overlayCtx.getImageData(0, 0, width, height);
+  const maskData = mask.getContext("2d").getImageData(0, 0, width, height).data;
+  for (let index = 0; index < overlayData.data.length; index += 4) {
+    overlayData.data[index + 3] = Math.round(overlayData.data[index + 3] * (maskData[index + 3] / 255));
+  }
+  overlayCtx.putImageData(overlayData, 0, 0);
+  outputCtx.drawImage(overlay, 0, 0);
+  return output;
+}
+
+function drawCreatePreview() {
+  if (!els.createCanvas) return;
+  syncCreateControlsFromState();
+  const { width, height } = createOutputSize();
+  els.createCanvas.width = width;
+  els.createCanvas.height = height;
+  createCtx.clearRect(0, 0, width, height);
+  createCtx.drawImage(buildTransitionCanvas(), 0, 0);
+
+  const points = createLinePixels(width, height);
+  createCtx.save();
+  createCtx.strokeStyle = cssVar("--accent-strong") || "#20766d";
+  createCtx.lineWidth = Math.max(2, Math.ceil(Math.max(width, height) / 96));
+  createCtx.setLineDash([8, 5]);
+  createCtx.beginPath();
+  createCtx.moveTo(points[0].x, points[0].y);
+  points.slice(1).forEach((point) => createCtx.lineTo(point.x, point.y));
+  createCtx.stroke();
+  createCtx.restore();
+
+  const tileA = state.create.tileAId === "transparent"
+    ? "transparent"
+    : state.tiles.find((tile) => tile.id === state.create.tileAId)?.name || "missing";
+  const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  els.createPreviewStatus.textContent = tileB
+    ? `Previewing ${tileB.name} over ${tileA}. Add Transition creates a new palette tile.`
+    : "Import at least one tile, then choose Tile B.";
+}
+
+function readCreateEffectControls() {
+  state.create.tileAId = els.createTileA.value || "transparent";
+  state.create.tileBId = els.createTileB.value || "";
+  state.create.feather = clampNumber(els.createFeather.value, 0, 64, state.create.feather);
+  state.create.splatter = clampNumber(els.createSplatter.value, 0, 100, state.create.splatter);
+  state.create.noise = clampNumber(els.createNoise.value, 0, 100, state.create.noise);
+  drawCreatePreview();
+}
+
+function transitionRecipeForCurrentTile() {
+  const tileA = state.create.tileAId === "transparent" ? null : state.tiles.find((tile) => tile.id === state.create.tileAId);
+  const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  const { width, height } = createOutputSize();
+  const points = state.create.points.length >= 2
+    ? state.create.points
+    : normalizeCreatePoints(defaultCreateLine(width, height), width, height);
+  return {
+    version: 1,
+    tileAId: state.create.tileAId,
+    tileAName: tileA ? tileA.name : "Transparent background",
+    tileBId: state.create.tileBId,
+    tileBName: tileB ? tileB.name : "Tile B",
+    side: state.create.side,
+    points,
+    feather: state.create.feather,
+    splatter: state.create.splatter,
+    noise: state.create.noise
+  };
+}
+
+async function addCreatedTransitionTile() {
+  readCreateEffectControls();
+  const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  if (!tileB) {
+    setStatus("Choose Tile B before creating a transition.");
+    return;
+  }
+  const name = uniqueTileName((els.createTileName.value.trim() || "transition.png").replace(/\.png$/i, "") + ".png");
+  const output = buildTransitionCanvas();
+  const tile = await addTileFromCanvas(output, name, {
+    anchor: cropAnchor(output.width, output.height),
+    transition: transitionRecipeForCurrentTile()
+  });
+  renderPalette();
+  updateStats();
+  drawCreatePreview();
+  setStatus(`Added ${tile.name} as a new transition tile. Source tiles were left unchanged.`);
+}
+
+function setCreateSide(side) {
+  state.create.side = side === "negative" ? "negative" : "positive";
+  drawCreatePreview();
+}
+
+function resetCreateLine() {
+  state.create.points = [];
+  drawCreatePreview();
+  setStatus("Transition cut line reset.");
+}
+
+function loadSelectedTransitionRecipe() {
+  const recipe = selectedTile()?.transition;
+  if (!recipe) {
+    setStatus("Select a transition tile with saved recipe data first.");
+    return;
+  }
+  const restored = deserializeTransitionRecipe(recipe);
+  if (!restored) {
+    setStatus("The selected tile does not have editable transition data.");
+    return;
+  }
+  Object.assign(state.create, {
+    tileAId: restored.tileAId,
+    tileBId: restored.tileBId,
+    side: restored.side,
+    points: restored.points,
+    feather: restored.feather,
+    splatter: restored.splatter,
+    noise: restored.noise
+  });
+  els.createTileName.value = uniqueTileName(selectedTile().name);
+  drawCreatePreview();
+  setStatus(`Loaded transition settings from ${selectedTile().name}.`);
 }
 
 function selectedTileLabel() {
@@ -692,7 +1081,7 @@ async function enqueueFiles(files) {
   if (!cropState) processNextCrop();
 }
 
-function addTileFromCanvas(canvas, name) {
+function addTileFromCanvas(canvas, name, updates = {}) {
   return new Promise((resolve) => {
     const url = canvas.toDataURL("image/png");
     const bounds = visiblePixelBounds(canvas);
@@ -705,7 +1094,8 @@ function addTileFromCanvas(canvas, name) {
         image,
         width: canvas.width,
         height: canvas.height,
-        bounds
+        bounds,
+        ...updates
       };
       tileCounter += 1;
       state.tiles.push(tile);
@@ -852,7 +1242,8 @@ function serializeTiles() {
       width: tile.width,
       height: tile.height,
       bounds: tile.bounds,
-      anchor: tile.anchor
+      anchor: tile.anchor,
+      transition: tile.transition || null
     }));
 }
 
@@ -938,7 +1329,8 @@ async function deserializeTiles(serializedTiles, requireStableIds = false) {
       bounds: visibleImageBounds(image),
       anchor: tile.anchor && Number.isFinite(tile.anchor.x) && Number.isFinite(tile.anchor.y)
         ? { x: tile.anchor.x, y: tile.anchor.y }
-        : null
+        : null,
+      transition: deserializeTransitionRecipe(tile.transition)
     };
   }));
   return { tiles, ids };
@@ -1089,6 +1481,7 @@ function uniqueTileName(name) {
   const baseName = hasExtension ? name.slice(0, extensionIndex) : name;
   const extension = hasExtension ? name.slice(extensionIndex) : "";
   const names = new Set(state.tiles.map((tile) => tile.name));
+  if (!names.has(name)) return name;
   let copyNumber = 1;
   let candidate = `${baseName} copy${extension}`;
 
@@ -1112,7 +1505,8 @@ function cloneSelectedTile() {
       width: tile.width,
       height: tile.height,
       bounds: tile.bounds ? { ...tile.bounds } : null,
-      anchor: tile.anchor ? { ...tile.anchor } : null
+      anchor: tile.anchor ? { ...tile.anchor } : null,
+      transition: tile.transition ? structuredClone(tile.transition) : null
     };
     tileCounter += 1;
     state.tiles.push(clone);
@@ -1969,6 +2363,50 @@ function cropPointer(event) {
   };
 }
 
+function createPointer(event) {
+  const rect = els.createCanvas.getBoundingClientRect();
+  return {
+    x: Math.min(els.createCanvas.width, Math.max(0, (event.clientX - rect.left) * (els.createCanvas.width / rect.width))),
+    y: Math.min(els.createCanvas.height, Math.max(0, (event.clientY - rect.top) * (els.createCanvas.height / rect.height)))
+  };
+}
+
+function beginCreateStroke(event) {
+  if (!state.create.tileBId) return;
+  const point = createPointer(event);
+  state.create.drawing = true;
+  state.create.points = normalizeCreatePoints([point], els.createCanvas.width, els.createCanvas.height);
+  els.createCanvas.setPointerCapture(event.pointerId);
+  drawCreatePreview();
+}
+
+function continueCreateStroke(event) {
+  if (!state.create.drawing) return;
+  const point = createPointer(event);
+  const points = state.create.points.map((storedPoint) => ({
+    x: storedPoint.x * els.createCanvas.width,
+    y: storedPoint.y * els.createCanvas.height
+  }));
+  const previous = points[points.length - 1];
+  if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3) return;
+  points.push(point);
+  state.create.points = normalizeCreatePoints(points, els.createCanvas.width, els.createCanvas.height);
+  drawCreatePreview();
+}
+
+function endCreateStroke(event) {
+  if (!state.create.drawing) return;
+  continueCreateStroke(event);
+  const points = createLinePixels(els.createCanvas.width, els.createCanvas.height);
+  if (points.length < 2) {
+    points.push({ x: els.createCanvas.width - points[0].x, y: els.createCanvas.height - points[0].y });
+    state.create.points = normalizeCreatePoints(points, els.createCanvas.width, els.createCanvas.height);
+  }
+  state.create.drawing = false;
+  els.createCanvas.releasePointerCapture(event.pointerId);
+  drawCreatePreview();
+}
+
 for (const tab of els.controlTabs) {
   tab.addEventListener("click", () => activateControlTab(tab.id));
   tab.addEventListener("keydown", handleControlTabKeydown);
@@ -2027,6 +2465,16 @@ els.flipTileVertical.addEventListener("click", () => transformSelectedTile("flip
 els.deleteTile.addEventListener("click", deleteSelectedTile);
 els.applyTileTint.addEventListener("click", applyTileTint);
 els.makeTileColorTransparent.addEventListener("click", makeTileColorTransparent);
+els.createTileA.addEventListener("change", readCreateEffectControls);
+els.createTileB.addEventListener("change", readCreateEffectControls);
+els.createFeather.addEventListener("input", readCreateEffectControls);
+els.createSplatter.addEventListener("input", readCreateEffectControls);
+els.createNoise.addEventListener("input", readCreateEffectControls);
+els.createSideUpper.addEventListener("click", () => setCreateSide("negative"));
+els.createSideLower.addEventListener("click", () => setCreateSide("positive"));
+els.clearCreateLine.addEventListener("click", resetCreateLine);
+els.loadCreatedTile.addEventListener("click", loadSelectedTransitionRecipe);
+els.addCreatedTile.addEventListener("click", addCreatedTransitionTile);
 els.renameLayer.addEventListener("click", renameActiveLayer);
 els.layerName.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
@@ -2048,6 +2496,12 @@ els.gridCanvas.addEventListener("pointerleave", () => {
   renderGrid();
 });
 els.gridCanvas.addEventListener("click", handleGridClick);
+els.createCanvas.addEventListener("pointerdown", beginCreateStroke);
+els.createCanvas.addEventListener("pointermove", continueCreateStroke);
+els.createCanvas.addEventListener("pointerup", endCreateStroke);
+els.createCanvas.addEventListener("pointercancel", () => {
+  state.create.drawing = false;
+});
 
 els.cropZoom.addEventListener("input", handleCropZoom);
 els.applyCropSize.addEventListener("click", applyCustomCropSize);
@@ -2122,12 +2576,22 @@ window.__tileBuilderDebug = {
       groupSelection: state.groupSelection,
       groupMoveOrigin: state.groupMoveOrigin,
       selectedTileId: state.selectedTileId,
+      create: {
+        tileAId: state.create.tileAId,
+        tileBId: state.create.tileBId,
+        side: state.create.side,
+        points: state.create.points,
+        feather: state.create.feather,
+        splatter: state.create.splatter,
+        noise: state.create.noise
+      },
       tiles: state.tiles.map((tile) => ({
         id: tile.id,
         name: tile.name,
         width: tile.width,
         height: tile.height,
-        anchor: tile.anchor
+        anchor: tile.anchor,
+        transition: tile.transition || null
       }))
     };
   }

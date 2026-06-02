@@ -131,6 +131,7 @@ input {
 .project-screen,
 .import-screen,
 .palette-screen,
+.create-screen,
 .export-screen {
   min-height: 0;
   overflow: auto;
@@ -162,6 +163,7 @@ input {
 .project-layout,
 .import-layout,
 .palette-manager-layout,
+.create-layout,
 .export-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -173,6 +175,11 @@ input {
 .palette-manager-layout {
   grid-template-columns: minmax(240px, 0.7fr) minmax(620px, 1.3fr);
   width: min(100%, 1240px);
+}
+
+.create-layout {
+  grid-template-columns: minmax(260px, 360px) minmax(420px, 1fr);
+  width: min(100%, 1180px);
 }
 
 .project-layout {
@@ -210,7 +217,7 @@ input {
 
 .control-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -655,6 +662,49 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+.create-tool-panel {
+  align-self: start;
+}
+
+.create-effect-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(74px, 1fr));
+  gap: 8px;
+}
+
+.create-preview-panel {
+  min-width: 0;
+}
+
+.create-canvas-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 520px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  background-size: 20px 20px;
+}
+
+#createCanvas {
+  display: block;
+  max-width: 100%;
+  max-height: min(68vh, 680px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
 .tile-card,
 .manager-tile-card {
   display: grid;
@@ -971,6 +1021,7 @@ button:disabled {
   .project-screen,
   .import-screen,
   .palette-screen,
+  .create-screen,
   .export-screen {
     padding: 20px 14px;
   }
@@ -978,8 +1029,13 @@ button:disabled {
   .project-layout,
   .import-layout,
   .palette-manager-layout,
+  .create-layout,
   .export-layout {
     grid-template-columns: 1fr;
+  }
+
+  .create-canvas-wrap {
+    min-height: 360px;
   }
 
   .palette-editor-layout {
@@ -1059,6 +1115,7 @@ button:disabled {
   .project-screen,
   .import-screen,
   .palette-screen,
+  .create-screen,
   .export-screen {
     padding: 16px 12px;
   }
@@ -1188,6 +1245,15 @@ button:disabled {
   .crop-nudge-tools {
     grid-template-columns: 1fr;
   }
+
+  .create-effect-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-canvas-wrap {
+    min-height: 260px;
+    padding: 8px;
+  }
 }
 
 @media (max-height: 480px) and (orientation: landscape) {
@@ -1232,6 +1298,7 @@ button:disabled {
   .project-screen,
   .import-screen,
   .palette-screen,
+  .create-screen,
   .export-screen {
     padding: 14px;
   }
@@ -1448,6 +1515,19 @@ button:disabled {
 
   .crop-nudge-buttons .secondary-button {
     padding: 5px 6px;
+  }
+
+  .create-layout {
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  }
+
+  .create-canvas-wrap {
+    min-height: 210px;
+    padding: 8px;
+  }
+
+  #createCanvas {
+    max-height: 220px;
   }
 }
 
