@@ -14,10 +14,24 @@ const state = {
       id: "layer-1",
       name: "Layer 1",
       visible: true,
-      placements: new Map()
+      placements: new Map(),
+      cull: {
+        enabled: false,
+        side: "positive",
+        points: [],
+        vertexCount: 5,
+        gridDivisions: 8,
+        snapToGrid: false,
+        lineMode: "smooth",
+        feather: 0,
+        activeVertexIndex: -1,
+        drawing: false,
+        draggingVertex: false
+      }
     }
   ],
   activeLayerId: "layer-1",
+  cullLayerId: "layer-1",
   pickedPlacement: null,
   groupSelection: [],
   groupMoveOrigin: null,
@@ -104,6 +118,18 @@ const els = {
   addCreatedTile: document.querySelector("#addCreatedTile"),
   createCanvas: document.querySelector("#createCanvas"),
   createPreviewStatus: document.querySelector("#createPreviewStatus"),
+  cullLayerSelect: document.querySelector("#cullLayerSelect"),
+  cullEnabled: document.querySelector("#cullEnabled"),
+  cullSideUpper: document.querySelector("#cullSideUpper"),
+  cullSideLower: document.querySelector("#cullSideLower"),
+  cullVertexCount: document.querySelector("#cullVertexCount"),
+  cullGridDivisions: document.querySelector("#cullGridDivisions"),
+  cullLineMode: document.querySelector("#cullLineMode"),
+  cullSnapToGrid: document.querySelector("#cullSnapToGrid"),
+  cullFeather: document.querySelector("#cullFeather"),
+  clearCullLine: document.querySelector("#clearCullLine"),
+  cullCanvas: document.querySelector("#cullCanvas"),
+  cullPreviewStatus: document.querySelector("#cullPreviewStatus"),
   paintTool: document.querySelector("#paintTool"),
   dropTool: document.querySelector("#dropTool"),
   eraseTool: document.querySelector("#eraseTool"),
@@ -165,6 +191,7 @@ const els = {
 const gridCtx = els.gridCanvas.getContext("2d");
 const cropCtx = els.cropCanvas.getContext("2d");
 const createCtx = els.createCanvas.getContext("2d");
+const cullCtx = els.cullCanvas.getContext("2d");
 const pendingFiles = [];
 let cropState = null;
 let tileCounter = 1;
@@ -341,6 +368,7 @@ function applyTheme(theme) {
   renderGrid();
   drawCrop();
   drawCreatePreview();
+  drawCullPreview();
 }
 
 function initializeTheme() {
@@ -1141,6 +1169,237 @@ function loadSelectedTransitionRecipe() {
   setStatus(`Loaded transition settings from ${selectedTile().name}.`);
 }
 
+function defaultCullState() {
+  return {
+    enabled: false,
+    side: "positive",
+    points: [],
+    vertexCount: 5,
+    gridDivisions: 8,
+    snapToGrid: false,
+    lineMode: "smooth",
+    feather: 0,
+    activeVertexIndex: -1,
+    drawing: false,
+    draggingVertex: false
+  };
+}
+
+function normalizeCull(cull) {
+  if (!cull || typeof cull !== "object") return defaultCullState();
+  const points = Array.isArray(cull.points)
+    ? cull.points
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({
+          x: Math.min(1, Math.max(0, point.x)),
+          y: Math.min(1, Math.max(0, point.y))
+        }))
+    : [];
+  return {
+    enabled: cull.enabled === true,
+    side: cull.side === "negative" ? "negative" : "positive",
+    points,
+    vertexCount: clampNumber(cull.vertexCount, 2, 24, Math.min(24, Math.max(2, points.length || 5))),
+    gridDivisions: clampNumber(cull.gridDivisions, 2, 32, 8),
+    snapToGrid: cull.snapToGrid === true,
+    lineMode: cull.lineMode === "straight" ? "straight" : "smooth",
+    feather: clampNumber(cull.feather, 0, 96, 0),
+    activeVertexIndex: -1,
+    drawing: false,
+    draggingVertex: false
+  };
+}
+
+function cullLayer() {
+  const layer = state.layers.find((item) => item.id === state.cullLayerId) || activeLayer();
+  state.cullLayerId = layer.id;
+  if (!layer.cull) layer.cull = defaultCullState();
+  return layer;
+}
+
+function defaultCullLine(width, height) {
+  return [
+    { x: width * 0.15, y: height * 0.65 },
+    { x: width * 0.85, y: height * 0.35 }
+  ];
+}
+
+function cullLinePixels(cull, width, height) {
+  const points = cull.points.length >= 2
+    ? cull.points.map((point) => ({ x: point.x * width, y: point.y * height }))
+    : defaultCullLine(width, height);
+  return points.map((point) => ({
+    x: Math.min(width, Math.max(0, point.x)),
+    y: Math.min(height, Math.max(0, point.y))
+  }));
+}
+
+function activeCullLinePixels(cull, width, height) {
+  return resamplePath(cullLinePixels(cull, width, height), cull.vertexCount);
+}
+
+function storedCullLinePixels(cull, width, height) {
+  return cull.points.map((point) => ({
+    x: Math.min(width, Math.max(0, point.x * width)),
+    y: Math.min(height, Math.max(0, point.y * height))
+  }));
+}
+
+function snapCullPoint(point, cull, width, height) {
+  if (!cull.snapToGrid) return point;
+  const divisions = Math.max(2, cull.gridDivisions);
+  const cellW = width / divisions;
+  const cellH = height / divisions;
+  return {
+    x: Math.min(width, Math.max(0, Math.round(point.x / cellW) * cellW)),
+    y: Math.min(height, Math.max(0, Math.round(point.y / cellH) * cellH))
+  };
+}
+
+function setCullPointsFromPixels(cull, points, width = els.cullCanvas.width, height = els.cullCanvas.height) {
+  cull.points = normalizeCreatePoints(points, width, height);
+}
+
+function syncCullControlsFromState() {
+  const previousValue = els.cullLayerSelect.value;
+  els.cullLayerSelect.replaceChildren();
+  for (const layer of state.layers) {
+    if (!layer.cull) layer.cull = defaultCullState();
+    const option = document.createElement("option");
+    option.value = layer.id;
+    option.textContent = layer.name;
+    els.cullLayerSelect.append(option);
+  }
+  if (state.layers.some((layer) => layer.id === previousValue)) {
+    state.cullLayerId = previousValue;
+  }
+  const layer = cullLayer();
+  const cull = layer.cull;
+  els.cullLayerSelect.value = layer.id;
+  els.cullEnabled.checked = cull.enabled;
+  els.cullVertexCount.value = cull.vertexCount;
+  els.cullGridDivisions.value = cull.gridDivisions;
+  els.cullLineMode.value = cull.lineMode;
+  els.cullSnapToGrid.checked = cull.snapToGrid;
+  els.cullFeather.value = cull.feather;
+  els.cullSideUpper.classList.toggle("is-active", cull.side === "negative");
+  els.cullSideLower.classList.toggle("is-active", cull.side === "positive");
+}
+
+function drawCullSubgrid(width, height, cull) {
+  const divisions = Math.max(2, cull.gridDivisions);
+  cullCtx.save();
+  cullCtx.strokeStyle = cull.snapToGrid ? "rgba(32, 118, 109, 0.42)" : "rgba(32, 118, 109, 0.18)";
+  cullCtx.lineWidth = 1;
+  for (let index = 1; index < divisions; index += 1) {
+    const x = width * index / divisions;
+    const y = height * index / divisions;
+    cullCtx.beginPath();
+    cullCtx.moveTo(x, 0);
+    cullCtx.lineTo(x, height);
+    cullCtx.stroke();
+    cullCtx.beginPath();
+    cullCtx.moveTo(0, y);
+    cullCtx.lineTo(width, y);
+    cullCtx.stroke();
+  }
+  cullCtx.restore();
+}
+
+function drawCullVertices(points, cull) {
+  const radius = Math.max(5, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 90));
+  cullCtx.save();
+  points.forEach((point, index) => {
+    const active = index === cull.activeVertexIndex;
+    cullCtx.beginPath();
+    cullCtx.arc(point.x, point.y, active ? radius + 2 : radius, 0, Math.PI * 2);
+    cullCtx.fillStyle = active ? cssVar("--accent-strong") : cssVar("--panel");
+    cullCtx.strokeStyle = cssVar("--accent-strong");
+    cullCtx.lineWidth = active ? 3 : 2;
+    cullCtx.fill();
+    cullCtx.stroke();
+  });
+  cullCtx.restore();
+}
+
+function renderSingleLayerToCanvas(layer, targetCtx) {
+  targetCtx.imageSmoothingEnabled = false;
+  for (const placement of sortedLayerPlacements(layer)) {
+    const tile = state.tiles.find((item) => item.id === placement.tileId);
+    if (!tile) continue;
+    const rect = tileDrawRect(tile, placement);
+    targetCtx.drawImage(tile.image, rect.x, rect.y, rect.width, rect.height);
+  }
+}
+
+function drawCullPreview() {
+  if (!els.cullCanvas) return;
+  syncCullControlsFromState();
+  const layer = cullLayer();
+  const cull = layer.cull;
+  els.cullCanvas.width = els.gridCanvas.width;
+  els.cullCanvas.height = els.gridCanvas.height;
+  cullCtx.clearRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
+  cullCtx.fillStyle = cssVar("--canvas-bg");
+  cullCtx.fillRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
+  renderSingleLayerToCanvas(layer, cullCtx);
+  const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+  drawCullSubgrid(els.cullCanvas.width, els.cullCanvas.height, cull);
+  cullCtx.save();
+  cullCtx.strokeStyle = cssVar("--accent-strong") || "#20766d";
+  cullCtx.lineWidth = Math.max(2, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 360));
+  cullCtx.setLineDash([10, 6]);
+  cullCtx.beginPath();
+  traceCreatePath(cullCtx, simplifyStrokePoints(points), cull.lineMode);
+  cullCtx.stroke();
+  cullCtx.restore();
+  drawCullVertices(points, cull);
+  const placementCount = layer.placements.size;
+  els.cullPreviewStatus.textContent = `${layer.name}: ${placementCount} placed tile${placementCount === 1 ? "" : "s"}. ${cull.enabled ? "Cull enabled for exports." : "Cull disabled for exports."}`;
+}
+
+function createCullMaskCanvas(width, height, cull) {
+  const points = activeCullLinePixels(cull, width, height);
+  const mask = document.createElement("canvas");
+  mask.width = width;
+  mask.height = height;
+  const ctx = mask.getContext("2d");
+  const cutPoints = extendedCutPoints(width, height, simplifyStrokePoints(points));
+  const orientation = lineOrientation(cutPoints);
+  const margin = Math.max(width, height) * 3;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  traceCreatePath(ctx, cutPoints, cull.lineMode);
+  if (orientation === "horizontal") {
+    if (cull.side === "positive") {
+      ctx.lineTo(width + margin, height + margin);
+      ctx.lineTo(-margin, height + margin);
+    } else {
+      ctx.lineTo(width + margin, -margin);
+      ctx.lineTo(-margin, -margin);
+    }
+  } else if (cull.side === "positive") {
+    ctx.lineTo(width + margin, height + margin);
+    ctx.lineTo(width + margin, -margin);
+  } else {
+    ctx.lineTo(-margin, height + margin);
+    ctx.lineTo(-margin, -margin);
+  }
+  ctx.closePath();
+  ctx.fill();
+  if (cull.feather > 0) {
+    const blurred = document.createElement("canvas");
+    blurred.width = width;
+    blurred.height = height;
+    const blurCtx = blurred.getContext("2d");
+    blurCtx.filter = `blur(${cull.feather}px)`;
+    blurCtx.drawImage(mask, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(blurred, 0, 0);
+  }
+  return mask;
+}
+
 function selectedTileLabel() {
   if (state.groupSelection.length > 0) {
     return state.groupMoveOrigin ? `Moving ${state.groupSelection.length} tiles` : `${state.groupSelection.length} tiles selected`;
@@ -1216,6 +1475,7 @@ function renderLayers() {
   els.moveLayerUp.disabled = layerIndex === state.layers.length - 1;
   els.moveLayerDown.disabled = layerIndex === 0;
   els.deleteLayer.disabled = state.layers.length === 1;
+  drawCullPreview();
 }
 
 function updateToolButtons() {
@@ -1246,6 +1506,7 @@ function updateStats() {
   updatePaletteEditor();
   updatePlacementPreview();
   updateToolButtons();
+  drawCullPreview();
 }
 
 function viewerScaleLabel() {
@@ -1514,7 +1775,17 @@ function saveProject() {
       id: layer.id,
       name: layer.name,
       visible: layer.visible,
-      placements: sortedLayerPlacements(layer)
+      placements: sortedLayerPlacements(layer),
+      cull: layer.cull ? {
+        enabled: layer.cull.enabled,
+        side: layer.cull.side,
+        points: layer.cull.points,
+        vertexCount: layer.cull.vertexCount,
+        gridDivisions: layer.cull.gridDivisions,
+        snapToGrid: layer.cull.snapToGrid,
+        lineMode: layer.cull.lineMode,
+        feather: layer.cull.feather
+      } : null
     })),
     selectedTileId: state.selectedTileId,
     activeLayerId: state.activeLayerId,
@@ -1643,7 +1914,8 @@ function deserializeProjectLayers(serializedLayers, tileIds, settings) {
       id: layer.id,
       name: typeof layer.name === "string" && layer.name.trim() ? layer.name.trim() : `Layer ${layerIndex + 1}`,
       visible: layer.visible !== false,
-      placements
+      placements,
+      cull: normalizeCull(layer.cull)
     };
   });
   return { layers, layerIds };
@@ -1676,6 +1948,7 @@ async function loadProject(file) {
       layers,
       selectedTileId,
       activeLayerId,
+      cullLayerId: activeLayerId,
       tool,
       viewerScale,
       userSetViewerScale: viewerScale !== 1,
@@ -2402,10 +2675,12 @@ function addLayer() {
     id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${nextNumber}`,
     name: `Layer ${nextNumber}`,
     visible: true,
-    placements: new Map()
+    placements: new Map(),
+    cull: defaultCullState()
   };
   state.layers.push(layer);
   state.activeLayerId = layer.id;
+  state.cullLayerId = layer.id;
   clearPickedPlacement();
   clearGroupSelection();
   renderLayers();
@@ -2423,6 +2698,7 @@ function deleteActiveLayer() {
   const index = state.layers.findIndex((item) => item.id === layer.id);
   state.layers.splice(index, 1);
   state.activeLayerId = state.layers[Math.max(0, index - 1)].id;
+  if (state.cullLayerId === layer.id) state.cullLayerId = state.activeLayerId;
   if (state.pickedPlacement && state.pickedPlacement.layerId === layer.id) clearPickedPlacement();
   clearGroupSelection();
   renderLayers();
@@ -2522,11 +2798,21 @@ function renderSceneLayers(layers) {
   ctx.clearRect(0, 0, map.width, map.height);
   ctx.imageSmoothingEnabled = false;
 
-  placements.forEach((placement) => {
-    const tile = state.tiles.find((item) => item.id === placement.tileId);
-    if (!tile) return;
-    const rect = tileDrawRect(tile, placement);
-    ctx.drawImage(tile.image, rect.x, rect.y, rect.width, rect.height);
+  layers.forEach((layer) => {
+    const layerCanvas = document.createElement("canvas");
+    layerCanvas.width = map.width;
+    layerCanvas.height = map.height;
+    const layerCtx = layerCanvas.getContext("2d");
+    layerCtx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
+    renderSingleLayerToCanvas(layer, layerCtx);
+    if (layer.cull && layer.cull.enabled && layer.cull.points.length >= 2) {
+      const mask = createCullMaskCanvas(layerCanvas.width, layerCanvas.height, layer.cull);
+      layerCtx.save();
+      layerCtx.globalCompositeOperation = "destination-in";
+      layerCtx.drawImage(mask, 0, 0);
+      layerCtx.restore();
+    }
+    ctx.drawImage(layerCanvas, 0, 0);
   });
 
   return { map, placements };
@@ -2693,6 +2979,135 @@ function endCreateStroke(event) {
   drawCreatePreview();
 }
 
+function cullPointer(event) {
+  const rect = els.cullCanvas.getBoundingClientRect();
+  return {
+    x: Math.min(els.cullCanvas.width, Math.max(0, (event.clientX - rect.left) * (els.cullCanvas.width / rect.width))),
+    y: Math.min(els.cullCanvas.height, Math.max(0, (event.clientY - rect.top) * (els.cullCanvas.height / rect.height)))
+  };
+}
+
+function nearestCullVertex(point, cull) {
+  const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+  const radius = Math.max(14, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 45));
+  let closest = { index: -1, distance: Infinity };
+  points.forEach((vertex, index) => {
+    const distance = Math.hypot(point.x - vertex.x, point.y - vertex.y);
+    if (distance < closest.distance) closest = { index, distance };
+  });
+  return closest.distance <= radius ? closest.index : -1;
+}
+
+function beginCullStroke(event) {
+  const layer = cullLayer();
+  const cull = layer.cull;
+  const point = snapCullPoint(cullPointer(event), cull, els.cullCanvas.width, els.cullCanvas.height);
+  const vertexIndex = nearestCullVertex(point, cull);
+  if (vertexIndex >= 0) {
+    cull.activeVertexIndex = vertexIndex;
+    cull.draggingVertex = true;
+    cull.drawing = false;
+    els.cullCanvas.setPointerCapture(event.pointerId);
+    drawCullPreview();
+    return;
+  }
+  cull.drawing = true;
+  cull.draggingVertex = false;
+  cull.activeVertexIndex = -1;
+  setCullPointsFromPixels(cull, [point]);
+  cull.enabled = true;
+  els.cullCanvas.setPointerCapture(event.pointerId);
+  drawCullPreview();
+}
+
+function continueCullStroke(event) {
+  const cull = cullLayer().cull;
+  if (!cull.drawing && !cull.draggingVertex) return;
+  const point = snapCullPoint(cullPointer(event), cull, els.cullCanvas.width, els.cullCanvas.height);
+  if (cull.draggingVertex) {
+    const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+    points[cull.activeVertexIndex] = point;
+    setCullPointsFromPixels(cull, points);
+    drawCullPreview();
+    return;
+  }
+  const points = storedCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+  const previous = points[points.length - 1];
+  if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3) return;
+  points.push(point);
+  setCullPointsFromPixels(cull, points);
+  drawCullPreview();
+}
+
+function endCullStroke(event) {
+  const cull = cullLayer().cull;
+  if (!cull.drawing && !cull.draggingVertex) return;
+  continueCullStroke(event);
+  if (cull.drawing) {
+    const points = storedCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+    if (points.length < 2) {
+      points.push({ x: els.cullCanvas.width - points[0].x, y: els.cullCanvas.height - points[0].y });
+    }
+    const resampled = resamplePath(points, cull.vertexCount)
+      .map((point) => snapCullPoint(point, cull, els.cullCanvas.width, els.cullCanvas.height));
+    setCullPointsFromPixels(cull, resampled);
+  }
+  cull.drawing = false;
+  cull.draggingVertex = false;
+  els.cullCanvas.releasePointerCapture(event.pointerId);
+  drawCullPreview();
+}
+
+function setCullLayer(layerId) {
+  if (!state.layers.some((layer) => layer.id === layerId)) return;
+  state.cullLayerId = layerId;
+  drawCullPreview();
+}
+
+function setCullSide(side) {
+  cullLayer().cull.side = side === "negative" ? "negative" : "positive";
+  drawCullPreview();
+}
+
+function updateCullControls() {
+  const cull = cullLayer().cull;
+  cull.enabled = els.cullEnabled.checked;
+  cull.gridDivisions = clampNumber(els.cullGridDivisions.value, 2, 32, cull.gridDivisions);
+  cull.lineMode = els.cullLineMode.value === "straight" ? "straight" : "smooth";
+  cull.snapToGrid = els.cullSnapToGrid.checked;
+  cull.feather = clampNumber(els.cullFeather.value, 0, 96, cull.feather);
+  els.cullGridDivisions.value = cull.gridDivisions;
+  els.cullFeather.value = cull.feather;
+  if (cull.snapToGrid && cull.points.length > 0) {
+    const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height)
+      .map((point) => snapCullPoint(point, cull, els.cullCanvas.width, els.cullCanvas.height));
+    setCullPointsFromPixels(cull, points);
+  }
+  drawCullPreview();
+}
+
+function setCullVertexCount() {
+  const cull = cullLayer().cull;
+  const nextCount = clampNumber(els.cullVertexCount.value, 2, 24, cull.vertexCount);
+  const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+  cull.vertexCount = nextCount;
+  els.cullVertexCount.value = nextCount;
+  setCullPointsFromPixels(cull, resamplePath(points, nextCount));
+  cull.activeVertexIndex = Math.min(cull.activeVertexIndex, nextCount - 1);
+  drawCullPreview();
+}
+
+function clearCullLine() {
+  const cull = cullLayer().cull;
+  cull.points = [];
+  cull.enabled = false;
+  cull.activeVertexIndex = -1;
+  cull.drawing = false;
+  cull.draggingVertex = false;
+  drawCullPreview();
+  setStatus(`${cullLayer().name} cull line reset.`);
+}
+
 for (const tab of els.controlTabs) {
   tab.addEventListener("click", () => activateControlTab(tab.id));
   tab.addEventListener("keydown", handleControlTabKeydown);
@@ -2768,6 +3183,16 @@ els.createSideLower.addEventListener("click", () => setCreateSide("positive"));
 els.clearCreateLine.addEventListener("click", resetCreateLine);
 els.loadCreatedTile.addEventListener("click", loadSelectedTransitionRecipe);
 els.addCreatedTile.addEventListener("click", addCreatedTransitionTile);
+els.cullLayerSelect.addEventListener("change", () => setCullLayer(els.cullLayerSelect.value));
+els.cullEnabled.addEventListener("change", updateCullControls);
+els.cullSideUpper.addEventListener("click", () => setCullSide("negative"));
+els.cullSideLower.addEventListener("click", () => setCullSide("positive"));
+els.cullVertexCount.addEventListener("input", setCullVertexCount);
+els.cullGridDivisions.addEventListener("input", updateCullControls);
+els.cullLineMode.addEventListener("change", updateCullControls);
+els.cullSnapToGrid.addEventListener("change", updateCullControls);
+els.cullFeather.addEventListener("input", updateCullControls);
+els.clearCullLine.addEventListener("click", clearCullLine);
 els.renameLayer.addEventListener("click", renameActiveLayer);
 els.layerName.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
@@ -2795,6 +3220,14 @@ els.createCanvas.addEventListener("pointerup", endCreateStroke);
 els.createCanvas.addEventListener("pointercancel", () => {
   state.create.drawing = false;
   state.create.draggingVertex = false;
+});
+els.cullCanvas.addEventListener("pointerdown", beginCullStroke);
+els.cullCanvas.addEventListener("pointermove", continueCullStroke);
+els.cullCanvas.addEventListener("pointerup", endCullStroke);
+els.cullCanvas.addEventListener("pointercancel", () => {
+  const cull = cullLayer().cull;
+  cull.drawing = false;
+  cull.draggingVertex = false;
 });
 
 els.cropZoom.addEventListener("input", handleCropZoom);
@@ -2864,7 +3297,17 @@ window.__tileBuilderDebug = {
         count: layer.placements.size,
         visible: layer.visible,
         order,
-        placements: sortedLayerPlacements(layer)
+        placements: sortedLayerPlacements(layer),
+        cull: layer.cull ? {
+          enabled: layer.cull.enabled,
+          side: layer.cull.side,
+          points: layer.cull.points,
+          vertexCount: layer.cull.vertexCount,
+          gridDivisions: layer.cull.gridDivisions,
+          snapToGrid: layer.cull.snapToGrid,
+          lineMode: layer.cull.lineMode,
+          feather: layer.cull.feather
+        } : null
       })),
       pickedPlacement: state.pickedPlacement,
       groupSelection: state.groupSelection,

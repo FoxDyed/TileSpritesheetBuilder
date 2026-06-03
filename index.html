@@ -25,7 +25,8 @@
           <button id="paletteTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="paletteScreen" tabindex="-1">3. Palette</button>
           <button id="createTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="createScreen" tabindex="-1">4. Create</button>
           <button id="placeTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="placeScreen" tabindex="-1">5. Place</button>
-          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportScreen" tabindex="-1">6. Export</button>
+          <button id="cullTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="cullScreen" tabindex="-1">6. Cull</button>
+          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportScreen" tabindex="-1">7. Export</button>
         </div>
         <p id="projectStatus" class="status-text workflow-status" aria-live="polite"></p>
       </nav>
@@ -386,9 +387,74 @@
         </section>
       </section>
 
-      <section id="exportScreen" class="app-screen export-screen" role="tabpanel" aria-labelledby="exportTab" hidden>
+      <section id="cullScreen" class="app-screen cull-screen" role="tabpanel" aria-labelledby="cullTab" hidden>
         <div class="screen-heading">
           <p class="eyebrow">Step 6</p>
+          <h2>Cull Layers</h2>
+          <p>Draw editable cut paths on placed layers so larger terrain sets can be trimmed without changing palette sprites.</p>
+        </div>
+        <div class="cull-layout">
+          <section class="feature-panel cull-tool-panel">
+            <h3>Layer Cut</h3>
+            <p class="panel-description">Select a placed layer, draw a cut path, then choose which side of that path stays visible in scene and layer exports.</p>
+            <label>
+              Layer
+              <select id="cullLayerSelect"></select>
+            </label>
+            <label class="checkbox-field">
+              <input id="cullEnabled" type="checkbox">
+              Enable layer cull
+            </label>
+            <fieldset class="palette-tool-group">
+              <legend>Keep side</legend>
+              <div class="tool-row layer-control-row" role="group" aria-label="Cull keep side">
+                <button id="cullSideUpper" class="tool-button" type="button">Upper/Left</button>
+                <button id="cullSideLower" class="tool-button is-active" type="button">Lower/Right</button>
+              </div>
+            </fieldset>
+            <fieldset class="palette-tool-group">
+              <legend>Path control</legend>
+              <div class="create-path-grid">
+                <label>
+                  Vertices
+                  <input id="cullVertexCount" type="number" min="2" max="24" value="5">
+                </label>
+                <label>
+                  Subgrid
+                  <input id="cullGridDivisions" type="number" min="2" max="32" value="8">
+                </label>
+                <label>
+                  Segment mode
+                  <select id="cullLineMode">
+                    <option value="smooth">Tangent</option>
+                    <option value="straight">Straight</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-field">
+                <input id="cullSnapToGrid" type="checkbox">
+                Snap vertices to grid
+              </label>
+            </fieldset>
+            <label>
+              Feather
+              <input id="cullFeather" type="number" min="0" max="96" value="0">
+            </label>
+            <button id="clearCullLine" class="secondary-button" type="button">Reset Line</button>
+          </section>
+          <section class="feature-panel cull-preview-panel">
+            <h3>Layer Preview</h3>
+            <div class="cull-canvas-wrap">
+              <canvas id="cullCanvas" width="900" height="620" aria-label="Draw layer cull line"></canvas>
+            </div>
+            <p id="cullPreviewStatus" class="status-text">Select a layer with placed tiles to draw a cull path.</p>
+          </section>
+        </div>
+      </section>
+
+      <section id="exportScreen" class="app-screen export-screen" role="tabpanel" aria-labelledby="exportTab" hidden>
+        <div class="screen-heading">
+          <p class="eyebrow">Step 7</p>
           <h2>Export</h2>
           <p>Review the shared project state and download either a Godot-ready packed sprite sheet or a rendered map PNG.</p>
         </div>

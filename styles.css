@@ -132,6 +132,7 @@ input {
 .import-screen,
 .palette-screen,
 .create-screen,
+.cull-screen,
 .export-screen {
   min-height: 0;
   overflow: auto;
@@ -164,6 +165,7 @@ input {
 .import-layout,
 .palette-manager-layout,
 .create-layout,
+.cull-layout,
 .export-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -177,7 +179,8 @@ input {
   width: min(100%, 1240px);
 }
 
-.create-layout {
+.create-layout,
+.cull-layout {
   grid-template-columns: minmax(260px, 360px) minmax(420px, 1fr);
   width: min(100%, 1180px);
 }
@@ -217,7 +220,7 @@ input {
 
 .control-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -662,7 +665,8 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
-.create-tool-panel {
+.create-tool-panel,
+.cull-tool-panel {
   align-self: start;
 }
 
@@ -684,11 +688,13 @@ button:disabled {
   gap: 8px;
 }
 
-.create-preview-panel {
+.create-preview-panel,
+.cull-preview-panel {
   min-width: 0;
 }
 
-.create-canvas-wrap {
+.create-canvas-wrap,
+.cull-canvas-wrap {
   display: grid;
   place-items: center;
   min-height: 520px;
@@ -706,7 +712,8 @@ button:disabled {
   background-size: 20px 20px;
 }
 
-#createCanvas {
+#createCanvas,
+#cullCanvas {
   display: block;
   max-width: 100%;
   max-height: min(68vh, 680px);
@@ -1034,6 +1041,7 @@ button:disabled {
   .import-screen,
   .palette-screen,
   .create-screen,
+  .cull-screen,
   .export-screen {
     padding: 20px 14px;
   }
@@ -1042,11 +1050,13 @@ button:disabled {
   .import-layout,
   .palette-manager-layout,
   .create-layout,
+  .cull-layout,
   .export-layout {
     grid-template-columns: 1fr;
   }
 
-  .create-canvas-wrap {
+  .create-canvas-wrap,
+  .cull-canvas-wrap {
     min-height: 360px;
   }
 
@@ -1128,6 +1138,7 @@ button:disabled {
   .import-screen,
   .palette-screen,
   .create-screen,
+  .cull-screen,
   .export-screen {
     padding: 16px 12px;
   }
@@ -1264,7 +1275,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .create-canvas-wrap {
+  .create-canvas-wrap,
+  .cull-canvas-wrap {
     min-height: 260px;
     padding: 8px;
   }
@@ -1301,7 +1313,7 @@ button:disabled {
   .workflow-nav {
     grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
     gap: 10px;
-    padding: 6px 10px;
+    padding: 4px 10px;
   }
 
   .place-screen {
@@ -1313,6 +1325,7 @@ button:disabled {
   .import-screen,
   .palette-screen,
   .create-screen,
+  .cull-screen,
   .export-screen {
     padding: 14px;
   }
@@ -1354,8 +1367,8 @@ button:disabled {
   }
 
   .control-tab {
-    padding: 5px 2px;
-    font-size: 0.64rem;
+    padding: 4px 1px;
+    font-size: 0.6rem;
   }
 
   .control-panel h2 {
@@ -1531,16 +1544,19 @@ button:disabled {
     padding: 5px 6px;
   }
 
-  .create-layout {
+  .create-layout,
+  .cull-layout {
     grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   }
 
-  .create-canvas-wrap {
+  .create-canvas-wrap,
+  .cull-canvas-wrap {
     min-height: 210px;
     padding: 8px;
   }
 
-  #createCanvas {
+  #createCanvas,
+  #cullCanvas {
     max-height: 220px;
   }
 }
@@ -1564,6 +1580,11 @@ button:disabled {
 
   .workflow-status {
     display: none;
+  }
+
+  .control-tab {
+    padding: 4px 1px;
+    font-size: 0.6rem;
   }
 
   .place-screen {

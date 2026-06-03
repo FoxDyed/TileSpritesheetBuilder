@@ -214,7 +214,7 @@ async function selectControlTab(page, name) {
 }
 
 async function clickExport(page, name) {
-  await selectControlTab(page, "6. Export");
+  await selectControlTab(page, "7. Export");
   await page.getByRole("button", { name }).click();
 }
 
@@ -234,7 +234,7 @@ async function setProject(page, {
   await page.locator("#spriteWidth").fill(String(spriteWidth));
   await page.locator("#spriteHeight").fill(String(spriteHeight));
   await page.getByRole("button", { name: "Apply Settings" }).click();
-  await selectControlTab(page, "6. Export");
+  await selectControlTab(page, "7. Export");
   await page.locator("#exportCols").fill(String(exportCols));
   await page.locator("#exportCols").blur();
   await selectControlTab(page, "2. Import");
@@ -428,7 +428,7 @@ test("saves and reloads a complete project with settings, sprites, layers, and p
   await expect(page.getByRole("checkbox", { name: "Show Layer 1" })).not.toBeChecked();
 });
 
-test("organizes the workflow into separate project, import, palette, create, place, and export screens", async ({ page }) => {
+test("organizes the workflow into separate project, import, palette, create, place, cull, and export screens", async ({ page }) => {
   await openApp(page);
 
   await expect(page.getByRole("tab", { name: "1. Project" })).toHaveAttribute("aria-selected", "true");
@@ -456,7 +456,12 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
   await clickCell(page, 1, 1);
 
-  await selectControlTab(page, "6. Export");
+  await selectControlTab(page, "6. Cull");
+  await expect(page.locator("#cullCanvas")).toBeVisible();
+  await expect(page.locator("#cullLayerSelect")).toBeVisible();
+  await expect(page.locator("#cullPreviewStatus")).toHaveText(/Layer 1: 1 placed tile/);
+
+  await selectControlTab(page, "7. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export Full Scene PNG" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export Active Layer PNG" })).toBeVisible();
@@ -556,6 +561,66 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   await expect(page.locator("#createLineMode")).toHaveValue("straight");
   await expect(page.locator("#createSnapToGrid")).toBeChecked();
   await expect(page.locator("#projectStatus")).toHaveText("Loaded transition settings from red-to-blue.png.");
+});
+
+test("draws an editable cull path on a placed layer and applies it to layer export", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 1 });
+  await addTile(page, "red.png", pngs.red);
+  await clickCell(page, 1, 1);
+
+  await selectControlTab(page, "6. Cull");
+  await page.locator("#cullVertexCount").fill("4");
+  await page.locator("#cullGridDivisions").fill("8");
+  await page.locator("#cullLineMode").selectOption("straight");
+  await page.locator("#cullSnapToGrid").check();
+  await page.locator("#cullCanvas").evaluate((canvas) => {
+    const state = window.__tileBuilderDebug.getState();
+    const rect = canvas.getBoundingClientRect();
+    const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+    const centerY = pad + state.tileHeight / 2 + (1 + 1) * state.tileHeight / 2;
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 3, ...point(0, centerY) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 3, ...point(canvas.width, centerY) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, ...point(canvas.width, centerY) }));
+  });
+
+  const cullState = await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull);
+  expect(cullState).toMatchObject({
+    enabled: true,
+    vertexCount: 4,
+    gridDivisions: 8,
+    snapToGrid: true,
+    lineMode: "straight"
+  });
+  expect(cullState.points).toHaveLength(4);
+
+  await clickExport(page, "Export Active Layer PNG");
+  const exported = await (await page.waitForFunction(() => window.__lastTileDownload)).jsonValue();
+  const inspected = await page.evaluate(async (href) => {
+    const image = new Image();
+    image.src = href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+    const centerX = pad + (state.rows - 1) * state.tileWidth / 2 + state.tileWidth / 2;
+    const centerY = pad + state.tileHeight / 2 + (1 + 1) * state.tileHeight / 2;
+    return {
+      above: [...ctx.getImageData(centerX, centerY - 12, 1, 1).data],
+      below: [...ctx.getImageData(centerX, centerY + 8, 1, 1).data]
+    };
+  }, exported.href);
+  expect(inspected.above[3]).toBe(0);
+  expect(inspected.below[0]).toBeGreaterThan(inspected.below[2]);
+  expect(inspected.below[3]).toBe(255);
 });
 
 test("manages palette tiles with clone, rename, transforms, re-cropping, recolor, transparency, and delete", async ({ page }) => {
@@ -710,7 +775,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("tab", { name: "6. Export" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "7. Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 
@@ -726,7 +791,7 @@ test("keeps controls usable on a narrow mobile viewport", async ({ page }) => {
   expect(layout.screenTop).toBeGreaterThanOrEqual(0);
   expect(layout.navHeight).toBeLessThan(120);
 
-  await selectControlTab(page, "6. Export");
+  await selectControlTab(page, "7. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await selectControlTab(page, "1. Project");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
@@ -745,7 +810,7 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
 
   await expect(page.locator("#zoomScale")).toHaveText("Scale: 50% (preview scaled)");
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.getByRole("tab", { name: "6. Export" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "7. Export" })).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 
   const layout = await page.evaluate(() => ({
@@ -760,7 +825,7 @@ test("keeps controls compact on a short mobile landscape viewport", async ({ pag
   expect(layout.navHeight).toBeLessThan(60);
   expect(layout.screenTop).toBeGreaterThanOrEqual(0);
 
-  await selectControlTab(page, "6. Export");
+  await selectControlTab(page, "7. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
   await selectControlTab(page, "1. Project");
   await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 2 });
