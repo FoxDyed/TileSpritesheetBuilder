@@ -213,6 +213,31 @@
               Tile B
               <select id="createTileB"></select>
             </label>
+            <fieldset class="palette-tool-group">
+              <legend>Decorative top layer</legend>
+              <div class="create-decoration-grid">
+                <label>
+                  Layer C
+                  <select id="createTileC">
+                    <option value="none">No decorative layer</option>
+                  </select>
+                </label>
+                <label>
+                  Blend
+                  <select id="createDecorationBlend">
+                    <option value="source-over">Normal</option>
+                    <option value="multiply">Multiply</option>
+                    <option value="screen">Screen</option>
+                    <option value="overlay">Overlay</option>
+                    <option value="soft-light">Soft light</option>
+                  </select>
+                </label>
+                <label>
+                  Opacity %
+                  <input id="createDecorationOpacity" type="number" min="0" max="100" value="45">
+                </label>
+              </div>
+            </fieldset>
             <label>
               Output name
               <input id="createTileName" type="text" maxlength="120" value="transition.png">

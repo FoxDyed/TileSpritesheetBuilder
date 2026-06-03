@@ -470,6 +470,7 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   await setProject(page);
   await addTile(page, "red.png", pngs.red, { openPlace: false });
   await addTile(page, "blue.png", pngs.blue, { openPlace: false });
+  await addTile(page, "sparkle.png", pngs.red, { openPlace: false });
 
   await selectControlTab(page, "4. Create");
   const ids = await page.evaluate(() => {
@@ -477,6 +478,9 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   });
   await page.locator("#createTileA").selectOption(ids["red.png"]);
   await page.locator("#createTileB").selectOption(ids["blue.png"]);
+  await page.locator("#createTileC").selectOption(ids["sparkle.png"]);
+  await page.locator("#createDecorationOpacity").fill("35");
+  await page.locator("#createDecorationBlend").selectOption("overlay");
   await page.locator("#createTileName").fill("red-to-blue.png");
   await page.locator("#createFeather").fill("4");
   await page.locator("#createSplatter").fill("0");
@@ -495,7 +499,7 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   });
   await page.getByRole("button", { name: "Add Transition" }).click();
 
-  await expect(page.locator(".manager-tile-card")).toHaveCount(3);
+  await expect(page.locator(".manager-tile-card")).toHaveCount(4);
   await expect(page.locator("#projectStatus")).toHaveText(
     "Added red-to-blue.png as a new transition tile. Source tiles were left unchanged."
   );
@@ -506,10 +510,13 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
       tile: state.tiles.find((tile) => tile.name === "red-to-blue.png")
     };
   });
-  expect(transition.names).toEqual(["red.png", "blue.png", "red-to-blue.png"]);
+  expect(transition.names).toEqual(["red.png", "blue.png", "sparkle.png", "red-to-blue.png"]);
   expect(transition.tile.transition).toMatchObject({
     tileAName: "red.png",
     tileBName: "blue.png",
+    tileCName: "sparkle.png",
+    decorationOpacity: 35,
+    decorationBlend: "overlay",
     feather: 4,
     splatter: 0,
     noise: 0
@@ -517,8 +524,11 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   expect(transition.tile.transition.points.length).toBeGreaterThanOrEqual(5);
 
   await page.locator("#createFeather").fill("20");
+  await page.locator("#createDecorationOpacity").fill("80");
   await page.getByRole("button", { name: "Load Selected" }).click();
   await expect(page.locator("#createFeather")).toHaveValue("4");
+  await expect(page.locator("#createDecorationOpacity")).toHaveValue("35");
+  await expect(page.locator("#createDecorationBlend")).toHaveValue("overlay");
   await expect(page.locator("#projectStatus")).toHaveText("Loaded transition settings from red-to-blue.png.");
 });
 

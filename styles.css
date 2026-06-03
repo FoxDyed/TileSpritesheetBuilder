@@ -672,6 +672,12 @@ button:disabled {
   gap: 8px;
 }
 
+.create-decoration-grid {
+  display: grid;
+  grid-template-columns: minmax(128px, 1.4fr) minmax(100px, 1fr) minmax(82px, 0.7fr);
+  gap: 8px;
+}
+
 .create-preview-panel {
   min-width: 0;
 }
@@ -1246,7 +1252,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .create-effect-grid {
+  .create-effect-grid,
+  .create-decoration-grid {
     grid-template-columns: 1fr;
   }
 

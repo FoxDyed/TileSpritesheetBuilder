@@ -27,6 +27,9 @@ const state = {
   create: {
     tileAId: "transparent",
     tileBId: "",
+    tileCId: "none",
+    decorationOpacity: 45,
+    decorationBlend: "source-over",
     side: "positive",
     points: [],
     feather: 6,
@@ -77,6 +80,9 @@ const els = {
   makeTileColorTransparent: document.querySelector("#makeTileColorTransparent"),
   createTileA: document.querySelector("#createTileA"),
   createTileB: document.querySelector("#createTileB"),
+  createTileC: document.querySelector("#createTileC"),
+  createDecorationOpacity: document.querySelector("#createDecorationOpacity"),
+  createDecorationBlend: document.querySelector("#createDecorationBlend"),
   createTileName: document.querySelector("#createTileName"),
   createSideUpper: document.querySelector("#createSideUpper"),
   createSideLower: document.querySelector("#createSideLower"),
@@ -568,6 +574,10 @@ function deserializeTransitionRecipe(recipe) {
     tileAName: typeof recipe.tileAName === "string" ? recipe.tileAName : "Transparent background",
     tileBId: typeof recipe.tileBId === "string" ? recipe.tileBId : "",
     tileBName: typeof recipe.tileBName === "string" ? recipe.tileBName : "Tile B",
+    tileCId: typeof recipe.tileCId === "string" ? recipe.tileCId : "none",
+    tileCName: typeof recipe.tileCName === "string" ? recipe.tileCName : "No decorative layer",
+    decorationOpacity: clampNumber(recipe.decorationOpacity, 0, 100, 45),
+    decorationBlend: supportedDecorationBlend(recipe.decorationBlend),
     side: recipe.side === "negative" ? "negative" : "positive",
     points,
     feather: clampNumber(recipe.feather, 0, 64, 6),
@@ -576,14 +586,23 @@ function deserializeTransitionRecipe(recipe) {
   };
 }
 
-function createTileOptions(select, includeTransparent) {
+function supportedDecorationBlend(value) {
+  return ["source-over", "multiply", "screen", "overlay", "soft-light"].includes(value) ? value : "source-over";
+}
+
+function createTileOptions(select, mode) {
   const previousValue = select.value;
   select.replaceChildren();
-  if (includeTransparent) {
+  if (mode === "transparent") {
     const transparent = document.createElement("option");
     transparent.value = "transparent";
     transparent.textContent = "Transparent background";
     select.append(transparent);
+  } else if (mode === "none") {
+    const none = document.createElement("option");
+    none.value = "none";
+    none.textContent = "No decorative layer";
+    select.append(none);
   }
   for (const tile of state.tiles) {
     const option = document.createElement("option");
@@ -593,8 +612,10 @@ function createTileOptions(select, includeTransparent) {
   }
   if ([...select.options].some((option) => option.value === previousValue)) {
     select.value = previousValue;
-  } else if (includeTransparent) {
+  } else if (mode === "transparent") {
     select.value = "transparent";
+  } else if (mode === "none") {
+    select.value = "none";
   } else if (state.selectedTileId && state.tiles.some((tile) => tile.id === state.selectedTileId)) {
     select.value = state.selectedTileId;
   } else {
@@ -603,8 +624,9 @@ function createTileOptions(select, includeTransparent) {
 }
 
 function syncCreateControlsFromState() {
-  createTileOptions(els.createTileA, true);
-  createTileOptions(els.createTileB, false);
+  createTileOptions(els.createTileA, "transparent");
+  createTileOptions(els.createTileB, "tile");
+  createTileOptions(els.createTileC, "none");
   if (state.create.tileAId !== "transparent" && !state.tiles.some((tile) => tile.id === state.create.tileAId)) {
     state.create.tileAId = "transparent";
   }
@@ -613,8 +635,14 @@ function syncCreateControlsFromState() {
       ? state.selectedTileId
       : state.tiles[0]?.id || "";
   }
+  if (state.create.tileCId !== "none" && !state.tiles.some((tile) => tile.id === state.create.tileCId)) {
+    state.create.tileCId = "none";
+  }
   els.createTileA.value = state.create.tileAId;
   els.createTileB.value = state.create.tileBId;
+  els.createTileC.value = state.create.tileCId;
+  els.createDecorationOpacity.value = state.create.decorationOpacity;
+  els.createDecorationBlend.value = state.create.decorationBlend;
   els.createFeather.value = state.create.feather;
   els.createSplatter.value = state.create.splatter;
   els.createNoise.value = state.create.noise;
@@ -679,6 +707,15 @@ function drawTileToCanvas(ctx, tile, width, height) {
   if (!tile) return;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tile.image, 0, 0, width, height);
+}
+
+function drawDecorationLayer(ctx, tile, width, height) {
+  if (!tile || state.create.decorationOpacity <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = state.create.decorationOpacity / 100;
+  ctx.globalCompositeOperation = supportedDecorationBlend(state.create.decorationBlend);
+  drawTileToCanvas(ctx, tile, width, height);
+  ctx.restore();
 }
 
 function lineOrientation(points) {
@@ -821,6 +858,7 @@ function applyMaskEffects(mask, points, splatter, noise) {
 function buildTransitionCanvas() {
   const tileA = state.create.tileAId === "transparent" ? null : state.tiles.find((tile) => tile.id === state.create.tileAId);
   const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  const tileC = state.create.tileCId === "none" ? null : state.tiles.find((tile) => tile.id === state.create.tileCId);
   const { width, height } = createOutputSize();
   const output = document.createElement("canvas");
   output.width = width;
@@ -850,6 +888,7 @@ function buildTransitionCanvas() {
   }
   overlayCtx.putImageData(overlayData, 0, 0);
   outputCtx.drawImage(overlay, 0, 0);
+  drawDecorationLayer(outputCtx, tileC, width, height);
   return output;
 }
 
@@ -876,14 +915,19 @@ function drawCreatePreview() {
     ? "transparent"
     : state.tiles.find((tile) => tile.id === state.create.tileAId)?.name || "missing";
   const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  const tileC = state.create.tileCId === "none" ? null : state.tiles.find((tile) => tile.id === state.create.tileCId);
+  const decoration = tileC ? ` with ${tileC.name} decoration` : "";
   els.createPreviewStatus.textContent = tileB
-    ? `Previewing ${tileB.name} over ${tileA}. Add Transition creates a new palette tile.`
+    ? `Previewing ${tileB.name} over ${tileA}${decoration}. Add Transition creates a new palette tile.`
     : "Import at least one tile, then choose Tile B.";
 }
 
 function readCreateEffectControls() {
   state.create.tileAId = els.createTileA.value || "transparent";
   state.create.tileBId = els.createTileB.value || "";
+  state.create.tileCId = els.createTileC.value || "none";
+  state.create.decorationOpacity = clampNumber(els.createDecorationOpacity.value, 0, 100, state.create.decorationOpacity);
+  state.create.decorationBlend = supportedDecorationBlend(els.createDecorationBlend.value);
   state.create.feather = clampNumber(els.createFeather.value, 0, 64, state.create.feather);
   state.create.splatter = clampNumber(els.createSplatter.value, 0, 100, state.create.splatter);
   state.create.noise = clampNumber(els.createNoise.value, 0, 100, state.create.noise);
@@ -893,6 +937,7 @@ function readCreateEffectControls() {
 function transitionRecipeForCurrentTile() {
   const tileA = state.create.tileAId === "transparent" ? null : state.tiles.find((tile) => tile.id === state.create.tileAId);
   const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
+  const tileC = state.create.tileCId === "none" ? null : state.tiles.find((tile) => tile.id === state.create.tileCId);
   const { width, height } = createOutputSize();
   const points = state.create.points.length >= 2
     ? state.create.points
@@ -903,6 +948,10 @@ function transitionRecipeForCurrentTile() {
     tileAName: tileA ? tileA.name : "Transparent background",
     tileBId: state.create.tileBId,
     tileBName: tileB ? tileB.name : "Tile B",
+    tileCId: state.create.tileCId,
+    tileCName: tileC ? tileC.name : "No decorative layer",
+    decorationOpacity: state.create.decorationOpacity,
+    decorationBlend: supportedDecorationBlend(state.create.decorationBlend),
     side: state.create.side,
     points,
     feather: state.create.feather,
@@ -955,6 +1004,9 @@ function loadSelectedTransitionRecipe() {
   Object.assign(state.create, {
     tileAId: restored.tileAId,
     tileBId: restored.tileBId,
+    tileCId: restored.tileCId,
+    decorationOpacity: restored.decorationOpacity,
+    decorationBlend: restored.decorationBlend,
     side: restored.side,
     points: restored.points,
     feather: restored.feather,
@@ -2516,6 +2568,9 @@ els.applyTileTint.addEventListener("click", applyTileTint);
 els.makeTileColorTransparent.addEventListener("click", makeTileColorTransparent);
 els.createTileA.addEventListener("change", readCreateEffectControls);
 els.createTileB.addEventListener("change", readCreateEffectControls);
+els.createTileC.addEventListener("change", readCreateEffectControls);
+els.createDecorationOpacity.addEventListener("input", readCreateEffectControls);
+els.createDecorationBlend.addEventListener("change", readCreateEffectControls);
 els.createFeather.addEventListener("input", readCreateEffectControls);
 els.createSplatter.addEventListener("input", readCreateEffectControls);
 els.createNoise.addEventListener("input", readCreateEffectControls);
@@ -2628,6 +2683,9 @@ window.__tileBuilderDebug = {
       create: {
         tileAId: state.create.tileAId,
         tileBId: state.create.tileBId,
+        tileCId: state.create.tileCId,
+        decorationOpacity: state.create.decorationOpacity,
+        decorationBlend: state.create.decorationBlend,
         side: state.create.side,
         points: state.create.points,
         feather: state.create.feather,
