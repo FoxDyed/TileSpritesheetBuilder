@@ -678,6 +678,12 @@ button:disabled {
   gap: 8px;
 }
 
+.create-path-grid {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(72px, 0.7fr) minmax(110px, 1fr);
+  gap: 8px;
+}
+
 .create-preview-panel {
   min-width: 0;
 }
@@ -1253,7 +1259,8 @@ button:disabled {
   }
 
   .create-effect-grid,
-  .create-decoration-grid {
+  .create-decoration-grid,
+  .create-path-grid {
     grid-template-columns: 1fr;
   }
 

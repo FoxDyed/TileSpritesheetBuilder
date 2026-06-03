@@ -266,6 +266,30 @@
                 </label>
               </div>
             </fieldset>
+            <fieldset class="palette-tool-group">
+              <legend>Path control</legend>
+              <div class="create-path-grid">
+                <label>
+                  Vertices
+                  <input id="createVertexCount" type="number" min="2" max="24" value="5">
+                </label>
+                <label>
+                  Subgrid
+                  <input id="createGridDivisions" type="number" min="2" max="32" value="8">
+                </label>
+                <label>
+                  Segment mode
+                  <select id="createLineMode">
+                    <option value="smooth">Tangent</option>
+                    <option value="straight">Straight</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-field">
+                <input id="createSnapToGrid" type="checkbox">
+                Snap vertices to grid
+              </label>
+            </fieldset>
             <div class="tool-row layer-control-row">
               <button id="clearCreateLine" class="secondary-button" type="button">Reset Line</button>
               <button id="loadCreatedTile" class="secondary-button" type="button">Load Selected</button>

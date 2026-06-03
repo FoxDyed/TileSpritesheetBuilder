@@ -481,6 +481,10 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   await page.locator("#createTileC").selectOption(ids["sparkle.png"]);
   await page.locator("#createDecorationOpacity").fill("35");
   await page.locator("#createDecorationBlend").selectOption("overlay");
+  await page.locator("#createVertexCount").fill("6");
+  await page.locator("#createGridDivisions").fill("8");
+  await page.locator("#createLineMode").selectOption("straight");
+  await page.locator("#createSnapToGrid").check();
   await page.locator("#createTileName").fill("red-to-blue.png");
   await page.locator("#createFeather").fill("4");
   await page.locator("#createSplatter").fill("0");
@@ -496,6 +500,18 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
     canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width * 0.58, canvas.height * 0.58) }));
     canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width * 0.82, canvas.height * 0.42) }));
     canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, ...point(canvas.width - 8, canvas.height * 0.52) }));
+  });
+  await page.locator("#createCanvas").evaluate((canvas) => {
+    const state = window.__tileBuilderDebug.getState();
+    const vertex = state.create.points[2];
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 2, ...point(vertex.x * canvas.width, vertex.y * canvas.height) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 2, ...point(canvas.width * 0.49, canvas.height * 0.2) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 2, ...point(canvas.width * 0.49, canvas.height * 0.2) }));
   });
   await page.getByRole("button", { name: "Add Transition" }).click();
 
@@ -517,11 +533,17 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
     tileCName: "sparkle.png",
     decorationOpacity: 35,
     decorationBlend: "overlay",
+    vertexCount: 6,
+    gridDivisions: 8,
+    snapToGrid: true,
+    lineMode: "straight",
     feather: 4,
     splatter: 0,
     noise: 0
   });
-  expect(transition.tile.transition.points.length).toBeGreaterThanOrEqual(5);
+  expect(transition.tile.transition.points.length).toBe(6);
+  expect(transition.tile.transition.points.every((point) => Math.abs(point.x * 8 - Math.round(point.x * 8)) < 0.001)).toBe(true);
+  expect(transition.tile.transition.points.every((point) => Math.abs(point.y * 8 - Math.round(point.y * 8)) < 0.001)).toBe(true);
 
   await page.locator("#createFeather").fill("20");
   await page.locator("#createDecorationOpacity").fill("80");
@@ -529,6 +551,10 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   await expect(page.locator("#createFeather")).toHaveValue("4");
   await expect(page.locator("#createDecorationOpacity")).toHaveValue("35");
   await expect(page.locator("#createDecorationBlend")).toHaveValue("overlay");
+  await expect(page.locator("#createVertexCount")).toHaveValue("6");
+  await expect(page.locator("#createGridDivisions")).toHaveValue("8");
+  await expect(page.locator("#createLineMode")).toHaveValue("straight");
+  await expect(page.locator("#createSnapToGrid")).toBeChecked();
   await expect(page.locator("#projectStatus")).toHaveText("Loaded transition settings from red-to-blue.png.");
 });
 

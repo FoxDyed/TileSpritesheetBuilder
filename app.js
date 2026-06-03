@@ -32,6 +32,12 @@ const state = {
     decorationBlend: "source-over",
     side: "positive",
     points: [],
+    vertexCount: 5,
+    gridDivisions: 8,
+    snapToGrid: false,
+    lineMode: "smooth",
+    activeVertexIndex: -1,
+    draggingVertex: false,
     feather: 6,
     splatter: 18,
     noise: 8,
@@ -89,6 +95,10 @@ const els = {
   createFeather: document.querySelector("#createFeather"),
   createSplatter: document.querySelector("#createSplatter"),
   createNoise: document.querySelector("#createNoise"),
+  createVertexCount: document.querySelector("#createVertexCount"),
+  createGridDivisions: document.querySelector("#createGridDivisions"),
+  createLineMode: document.querySelector("#createLineMode"),
+  createSnapToGrid: document.querySelector("#createSnapToGrid"),
   clearCreateLine: document.querySelector("#clearCreateLine"),
   loadCreatedTile: document.querySelector("#loadCreatedTile"),
   addCreatedTile: document.querySelector("#addCreatedTile"),
@@ -580,6 +590,10 @@ function deserializeTransitionRecipe(recipe) {
     decorationBlend: supportedDecorationBlend(recipe.decorationBlend),
     side: recipe.side === "negative" ? "negative" : "positive",
     points,
+    vertexCount: clampNumber(recipe.vertexCount, 2, 24, Math.min(24, Math.max(2, points.length || 5))),
+    gridDivisions: clampNumber(recipe.gridDivisions, 2, 32, 8),
+    snapToGrid: recipe.snapToGrid === true,
+    lineMode: recipe.lineMode === "straight" ? "straight" : "smooth",
     feather: clampNumber(recipe.feather, 0, 64, 6),
     splatter: clampNumber(recipe.splatter, 0, 100, 18),
     noise: clampNumber(recipe.noise, 0, 100, 8)
@@ -646,6 +660,10 @@ function syncCreateControlsFromState() {
   els.createFeather.value = state.create.feather;
   els.createSplatter.value = state.create.splatter;
   els.createNoise.value = state.create.noise;
+  els.createVertexCount.value = state.create.vertexCount;
+  els.createGridDivisions.value = state.create.gridDivisions;
+  els.createLineMode.value = state.create.lineMode;
+  els.createSnapToGrid.checked = state.create.snapToGrid;
   els.createSideUpper.classList.toggle("is-active", state.create.side === "negative");
   els.createSideLower.classList.toggle("is-active", state.create.side === "positive");
   els.addCreatedTile.disabled = !state.create.tileBId;
@@ -679,6 +697,11 @@ function createLinePixels(width, height) {
   }));
 }
 
+function activeCreateLinePixels(width, height) {
+  const points = createLinePixels(width, height);
+  return resamplePath(points, state.create.vertexCount);
+}
+
 function storedCreateLinePixels(width, height) {
   return state.create.points.map((point) => ({
     x: Math.min(width, Math.max(0, point.x * width)),
@@ -691,6 +714,58 @@ function normalizeCreatePoints(points, width, height) {
     x: Math.min(1, Math.max(0, point.x / width)),
     y: Math.min(1, Math.max(0, point.y / height))
   }));
+}
+
+function snapCreatePoint(point, width, height) {
+  if (!state.create.snapToGrid) return point;
+  const divisions = Math.max(2, state.create.gridDivisions);
+  const cellW = width / divisions;
+  const cellH = height / divisions;
+  return {
+    x: Math.min(width, Math.max(0, Math.round(point.x / cellW) * cellW)),
+    y: Math.min(height, Math.max(0, Math.round(point.y / cellH) * cellH))
+  };
+}
+
+function pathLength(points) {
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    length += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
+  }
+  return length;
+}
+
+function pointAtPathDistance(points, targetDistance) {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1 || targetDistance <= 0) return { ...points[0] };
+  let walked = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const segmentLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+    if (segmentLength === 0) continue;
+    if (walked + segmentLength >= targetDistance) {
+      const t = (targetDistance - walked) / segmentLength;
+      return {
+        x: previous.x + (current.x - previous.x) * t,
+        y: previous.y + (current.y - previous.y) * t
+      };
+    }
+    walked += segmentLength;
+  }
+  return { ...points[points.length - 1] };
+}
+
+function resamplePath(points, count) {
+  const targetCount = Math.max(2, Math.min(24, count));
+  if (points.length === 0) return [];
+  if (points.length === targetCount) return points.map((point) => ({ ...point }));
+  if (points.length === 1) return Array.from({ length: targetCount }, () => ({ ...points[0] }));
+  const totalLength = pathLength(points);
+  if (totalLength === 0) return Array.from({ length: targetCount }, () => ({ ...points[0] }));
+  return Array.from({ length: targetCount }, (_, index) => {
+    return pointAtPathDistance(points, totalLength * (index / (targetCount - 1)));
+  });
 }
 
 function simplifyStrokePoints(points) {
@@ -744,9 +819,9 @@ function extendedCutPoints(width, height, points) {
   return [extendedFirst, ...points, extendedLast];
 }
 
-function traceSmoothPath(ctx, points) {
+function traceCreatePath(ctx, points, lineMode = state.create.lineMode) {
   ctx.moveTo(points[0].x, points[0].y);
-  if (points.length < 3) {
+  if (lineMode === "straight" || points.length < 3) {
     points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
     return;
   }
@@ -759,6 +834,42 @@ function traceSmoothPath(ctx, points) {
   ctx.lineTo(last.x, last.y);
 }
 
+function drawCreateSubgrid(width, height) {
+  const divisions = Math.max(2, state.create.gridDivisions);
+  createCtx.save();
+  createCtx.strokeStyle = state.create.snapToGrid ? "rgba(32, 118, 109, 0.42)" : "rgba(32, 118, 109, 0.18)";
+  createCtx.lineWidth = 1;
+  for (let index = 1; index < divisions; index += 1) {
+    const x = width * index / divisions;
+    const y = height * index / divisions;
+    createCtx.beginPath();
+    createCtx.moveTo(x, 0);
+    createCtx.lineTo(x, height);
+    createCtx.stroke();
+    createCtx.beginPath();
+    createCtx.moveTo(0, y);
+    createCtx.lineTo(width, y);
+    createCtx.stroke();
+  }
+  createCtx.restore();
+}
+
+function drawCreateVertices(points) {
+  const radius = Math.max(5, Math.ceil(Math.max(els.createCanvas.width, els.createCanvas.height) / 48));
+  createCtx.save();
+  points.forEach((point, index) => {
+    const active = index === state.create.activeVertexIndex;
+    createCtx.beginPath();
+    createCtx.arc(point.x, point.y, active ? radius + 2 : radius, 0, Math.PI * 2);
+    createCtx.fillStyle = active ? cssVar("--accent-strong") : cssVar("--panel");
+    createCtx.strokeStyle = cssVar("--accent-strong");
+    createCtx.lineWidth = active ? 3 : 2;
+    createCtx.fill();
+    createCtx.stroke();
+  });
+  createCtx.restore();
+}
+
 function createMaskCanvas(width, height, points, side, feather) {
   const mask = document.createElement("canvas");
   mask.width = width;
@@ -769,7 +880,7 @@ function createMaskCanvas(width, height, points, side, feather) {
   const margin = Math.max(width, height) * 3;
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  traceSmoothPath(ctx, cutPoints);
+  traceCreatePath(ctx, cutPoints);
   if (orientation === "horizontal") {
     if (side === "positive") {
       ctx.lineTo(width + margin, height + margin);
@@ -868,7 +979,7 @@ function buildTransitionCanvas() {
   drawTileToCanvas(outputCtx, tileA, width, height);
 
   if (!tileB) return output;
-  const points = createLinePixels(width, height);
+  const points = activeCreateLinePixels(width, height);
   const mask = applyMaskEffects(
     createMaskCanvas(width, height, points, state.create.side, state.create.feather),
     points,
@@ -901,15 +1012,17 @@ function drawCreatePreview() {
   createCtx.clearRect(0, 0, width, height);
   createCtx.drawImage(buildTransitionCanvas(), 0, 0);
 
-  const points = createLinePixels(width, height);
+  const points = activeCreateLinePixels(width, height);
+  drawCreateSubgrid(width, height);
   createCtx.save();
   createCtx.strokeStyle = cssVar("--accent-strong") || "#20766d";
   createCtx.lineWidth = Math.max(2, Math.ceil(Math.max(width, height) / 96));
   createCtx.setLineDash([8, 5]);
   createCtx.beginPath();
-  traceSmoothPath(createCtx, simplifyStrokePoints(points));
+  traceCreatePath(createCtx, simplifyStrokePoints(points));
   createCtx.stroke();
   createCtx.restore();
+  drawCreateVertices(points);
 
   const tileA = state.create.tileAId === "transparent"
     ? "transparent"
@@ -931,6 +1044,9 @@ function readCreateEffectControls() {
   state.create.feather = clampNumber(els.createFeather.value, 0, 64, state.create.feather);
   state.create.splatter = clampNumber(els.createSplatter.value, 0, 100, state.create.splatter);
   state.create.noise = clampNumber(els.createNoise.value, 0, 100, state.create.noise);
+  state.create.gridDivisions = clampNumber(els.createGridDivisions.value, 2, 32, state.create.gridDivisions);
+  state.create.lineMode = els.createLineMode.value === "straight" ? "straight" : "smooth";
+  state.create.snapToGrid = els.createSnapToGrid.checked;
   drawCreatePreview();
 }
 
@@ -939,9 +1055,7 @@ function transitionRecipeForCurrentTile() {
   const tileB = state.tiles.find((tile) => tile.id === state.create.tileBId);
   const tileC = state.create.tileCId === "none" ? null : state.tiles.find((tile) => tile.id === state.create.tileCId);
   const { width, height } = createOutputSize();
-  const points = state.create.points.length >= 2
-    ? state.create.points
-    : normalizeCreatePoints(defaultCreateLine(width, height), width, height);
+  const points = normalizeCreatePoints(activeCreateLinePixels(width, height), width, height);
   return {
     version: 1,
     tileAId: state.create.tileAId,
@@ -954,6 +1068,10 @@ function transitionRecipeForCurrentTile() {
     decorationBlend: supportedDecorationBlend(state.create.decorationBlend),
     side: state.create.side,
     points,
+    vertexCount: state.create.vertexCount,
+    gridDivisions: state.create.gridDivisions,
+    snapToGrid: state.create.snapToGrid,
+    lineMode: state.create.lineMode,
     feather: state.create.feather,
     splatter: state.create.splatter,
     noise: state.create.noise
@@ -986,6 +1104,7 @@ function setCreateSide(side) {
 
 function resetCreateLine() {
   state.create.points = [];
+  state.create.activeVertexIndex = -1;
   drawCreatePreview();
   setStatus("Transition cut line reset.");
 }
@@ -1009,6 +1128,10 @@ function loadSelectedTransitionRecipe() {
     decorationBlend: restored.decorationBlend,
     side: restored.side,
     points: restored.points,
+    vertexCount: restored.vertexCount,
+    gridDivisions: restored.gridDivisions,
+    snapToGrid: restored.snapToGrid,
+    lineMode: restored.lineMode,
     feather: restored.feather,
     splatter: restored.splatter,
     noise: restored.noise
@@ -2475,35 +2598,97 @@ function createPointer(event) {
   };
 }
 
+function setCreatePointsFromPixels(points, width = els.createCanvas.width, height = els.createCanvas.height) {
+  state.create.points = normalizeCreatePoints(points, width, height);
+}
+
+function nearestCreateVertex(point) {
+  const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+  const radius = Math.max(12, Math.ceil(Math.max(els.createCanvas.width, els.createCanvas.height) / 20));
+  let closest = { index: -1, distance: Infinity };
+  points.forEach((vertex, index) => {
+    const distance = Math.hypot(point.x - vertex.x, point.y - vertex.y);
+    if (distance < closest.distance) closest = { index, distance };
+  });
+  return closest.distance <= radius ? closest.index : -1;
+}
+
+function setCreateVertexCount() {
+  const nextCount = clampNumber(els.createVertexCount.value, 2, 24, state.create.vertexCount);
+  const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+  state.create.vertexCount = nextCount;
+  els.createVertexCount.value = nextCount;
+  setCreatePointsFromPixels(resamplePath(points, nextCount));
+  state.create.activeVertexIndex = Math.min(state.create.activeVertexIndex, nextCount - 1);
+  drawCreatePreview();
+}
+
+function updateCreatePathControls() {
+  const previousSnap = state.create.snapToGrid;
+  state.create.gridDivisions = clampNumber(els.createGridDivisions.value, 2, 32, state.create.gridDivisions);
+  state.create.lineMode = els.createLineMode.value === "straight" ? "straight" : "smooth";
+  state.create.snapToGrid = els.createSnapToGrid.checked;
+  els.createGridDivisions.value = state.create.gridDivisions;
+  if (state.create.snapToGrid && (!previousSnap || state.create.points.length > 0)) {
+    const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height)
+      .map((point) => snapCreatePoint(point, els.createCanvas.width, els.createCanvas.height));
+    setCreatePointsFromPixels(points);
+  }
+  drawCreatePreview();
+}
+
 function beginCreateStroke(event) {
   if (!state.create.tileBId) return;
-  const point = createPointer(event);
+  const point = snapCreatePoint(createPointer(event), els.createCanvas.width, els.createCanvas.height);
+  const vertexIndex = nearestCreateVertex(point);
+  if (vertexIndex >= 0) {
+    state.create.activeVertexIndex = vertexIndex;
+    state.create.draggingVertex = true;
+    state.create.drawing = false;
+    els.createCanvas.setPointerCapture(event.pointerId);
+    drawCreatePreview();
+    return;
+  }
   state.create.drawing = true;
-  state.create.points = normalizeCreatePoints([point], els.createCanvas.width, els.createCanvas.height);
+  state.create.draggingVertex = false;
+  state.create.activeVertexIndex = -1;
+  setCreatePointsFromPixels([point]);
   els.createCanvas.setPointerCapture(event.pointerId);
   drawCreatePreview();
 }
 
 function continueCreateStroke(event) {
-  if (!state.create.drawing) return;
-  const point = createPointer(event);
+  if (!state.create.drawing && !state.create.draggingVertex) return;
+  const point = snapCreatePoint(createPointer(event), els.createCanvas.width, els.createCanvas.height);
+  if (state.create.draggingVertex) {
+    const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+    points[state.create.activeVertexIndex] = point;
+    setCreatePointsFromPixels(points);
+    drawCreatePreview();
+    return;
+  }
   const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
   const previous = points[points.length - 1];
   if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3) return;
   points.push(point);
-  state.create.points = normalizeCreatePoints(points, els.createCanvas.width, els.createCanvas.height);
+  setCreatePointsFromPixels(points);
   drawCreatePreview();
 }
 
 function endCreateStroke(event) {
-  if (!state.create.drawing) return;
+  if (!state.create.drawing && !state.create.draggingVertex) return;
   continueCreateStroke(event);
-  const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
-  if (points.length < 2) {
-    points.push({ x: els.createCanvas.width - points[0].x, y: els.createCanvas.height - points[0].y });
-    state.create.points = normalizeCreatePoints(points, els.createCanvas.width, els.createCanvas.height);
+  if (state.create.drawing) {
+    const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+    if (points.length < 2) {
+      points.push({ x: els.createCanvas.width - points[0].x, y: els.createCanvas.height - points[0].y });
+    }
+    const resampled = resamplePath(points, state.create.vertexCount)
+      .map((point) => snapCreatePoint(point, els.createCanvas.width, els.createCanvas.height));
+    setCreatePointsFromPixels(resampled);
   }
   state.create.drawing = false;
+  state.create.draggingVertex = false;
   els.createCanvas.releasePointerCapture(event.pointerId);
   drawCreatePreview();
 }
@@ -2574,6 +2759,10 @@ els.createDecorationBlend.addEventListener("change", readCreateEffectControls);
 els.createFeather.addEventListener("input", readCreateEffectControls);
 els.createSplatter.addEventListener("input", readCreateEffectControls);
 els.createNoise.addEventListener("input", readCreateEffectControls);
+els.createVertexCount.addEventListener("input", setCreateVertexCount);
+els.createGridDivisions.addEventListener("input", updateCreatePathControls);
+els.createLineMode.addEventListener("change", updateCreatePathControls);
+els.createSnapToGrid.addEventListener("change", updateCreatePathControls);
 els.createSideUpper.addEventListener("click", () => setCreateSide("negative"));
 els.createSideLower.addEventListener("click", () => setCreateSide("positive"));
 els.clearCreateLine.addEventListener("click", resetCreateLine);
@@ -2605,6 +2794,7 @@ els.createCanvas.addEventListener("pointermove", continueCreateStroke);
 els.createCanvas.addEventListener("pointerup", endCreateStroke);
 els.createCanvas.addEventListener("pointercancel", () => {
   state.create.drawing = false;
+  state.create.draggingVertex = false;
 });
 
 els.cropZoom.addEventListener("input", handleCropZoom);
@@ -2688,6 +2878,11 @@ window.__tileBuilderDebug = {
         decorationBlend: state.create.decorationBlend,
         side: state.create.side,
         points: state.create.points,
+        vertexCount: state.create.vertexCount,
+        gridDivisions: state.create.gridDivisions,
+        snapToGrid: state.create.snapToGrid,
+        lineMode: state.create.lineMode,
+        activeVertexIndex: state.create.activeVertexIndex,
         feather: state.create.feather,
         splatter: state.create.splatter,
         noise: state.create.noise
