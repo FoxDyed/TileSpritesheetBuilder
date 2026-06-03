@@ -487,9 +487,11 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
       clientX: rect.left + x / canvas.width * rect.width,
       clientY: rect.top + y / canvas.height * rect.height
     });
-    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, ...point(0, canvas.height / 2) }));
-    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width, canvas.height / 2) }));
-    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, ...point(canvas.width, canvas.height / 2) }));
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, ...point(8, canvas.height * 0.62) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width * 0.28, canvas.height * 0.34) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width * 0.58, canvas.height * 0.58) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width * 0.82, canvas.height * 0.42) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, ...point(canvas.width - 8, canvas.height * 0.52) }));
   });
   await page.getByRole("button", { name: "Add Transition" }).click();
 
@@ -512,7 +514,7 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
     splatter: 0,
     noise: 0
   });
-  expect(transition.tile.transition.points.length).toBeGreaterThanOrEqual(2);
+  expect(transition.tile.transition.points.length).toBeGreaterThanOrEqual(5);
 
   await page.locator("#createFeather").fill("20");
   await page.getByRole("button", { name: "Load Selected" }).click();

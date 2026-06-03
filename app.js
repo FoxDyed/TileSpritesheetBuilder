@@ -651,11 +651,28 @@ function createLinePixels(width, height) {
   }));
 }
 
+function storedCreateLinePixels(width, height) {
+  return state.create.points.map((point) => ({
+    x: Math.min(width, Math.max(0, point.x * width)),
+    y: Math.min(height, Math.max(0, point.y * height))
+  }));
+}
+
 function normalizeCreatePoints(points, width, height) {
   return points.map((point) => ({
     x: Math.min(1, Math.max(0, point.x / width)),
     y: Math.min(1, Math.max(0, point.y / height))
   }));
+}
+
+function simplifyStrokePoints(points) {
+  const simplified = [];
+  for (const point of points) {
+    const previous = simplified[simplified.length - 1];
+    if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 1.5) continue;
+    simplified.push(point);
+  }
+  return simplified;
 }
 
 function drawTileToCanvas(ctx, tile, width, height) {
@@ -670,30 +687,66 @@ function lineOrientation(points) {
   return Math.abs(last.x - first.x) >= Math.abs(last.y - first.y) ? "horizontal" : "vertical";
 }
 
+function extendedCutPoints(width, height, points) {
+  if (points.length < 2) return points;
+  const margin = Math.max(width, height) * 3;
+  const first = points[0];
+  const second = points[1];
+  const beforeLast = points[points.length - 2];
+  const last = points[points.length - 1];
+  const firstLength = Math.hypot(first.x - second.x, first.y - second.y) || 1;
+  const lastLength = Math.hypot(last.x - beforeLast.x, last.y - beforeLast.y) || 1;
+  const extendedFirst = {
+    x: first.x + (first.x - second.x) / firstLength * margin,
+    y: first.y + (first.y - second.y) / firstLength * margin
+  };
+  const extendedLast = {
+    x: last.x + (last.x - beforeLast.x) / lastLength * margin,
+    y: last.y + (last.y - beforeLast.y) / lastLength * margin
+  };
+  return [extendedFirst, ...points, extendedLast];
+}
+
+function traceSmoothPath(ctx, points) {
+  ctx.moveTo(points[0].x, points[0].y);
+  if (points.length < 3) {
+    points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+    return;
+  }
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    ctx.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+  }
+  const last = points[points.length - 1];
+  ctx.lineTo(last.x, last.y);
+}
+
 function createMaskCanvas(width, height, points, side, feather) {
   const mask = document.createElement("canvas");
   mask.width = width;
   mask.height = height;
   const ctx = mask.getContext("2d");
-  const orientation = lineOrientation(points);
+  const cutPoints = extendedCutPoints(width, height, simplifyStrokePoints(points));
+  const orientation = lineOrientation(cutPoints);
+  const margin = Math.max(width, height) * 3;
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+  traceSmoothPath(ctx, cutPoints);
   if (orientation === "horizontal") {
     if (side === "positive") {
-      ctx.lineTo(width, height);
-      ctx.lineTo(0, height);
+      ctx.lineTo(width + margin, height + margin);
+      ctx.lineTo(-margin, height + margin);
     } else {
-      ctx.lineTo(width, 0);
-      ctx.lineTo(0, 0);
+      ctx.lineTo(width + margin, -margin);
+      ctx.lineTo(-margin, -margin);
     }
   } else if (side === "positive") {
-    ctx.lineTo(width, height);
-    ctx.lineTo(width, 0);
+    ctx.lineTo(width + margin, height + margin);
+    ctx.lineTo(width + margin, -margin);
   } else {
-    ctx.lineTo(0, height);
-    ctx.lineTo(0, 0);
+    ctx.lineTo(-margin, height + margin);
+    ctx.lineTo(-margin, -margin);
   }
   ctx.closePath();
   ctx.fill();
@@ -815,8 +868,7 @@ function drawCreatePreview() {
   createCtx.lineWidth = Math.max(2, Math.ceil(Math.max(width, height) / 96));
   createCtx.setLineDash([8, 5]);
   createCtx.beginPath();
-  createCtx.moveTo(points[0].x, points[0].y);
-  points.slice(1).forEach((point) => createCtx.lineTo(point.x, point.y));
+  traceSmoothPath(createCtx, simplifyStrokePoints(points));
   createCtx.stroke();
   createCtx.restore();
 
@@ -2383,10 +2435,7 @@ function beginCreateStroke(event) {
 function continueCreateStroke(event) {
   if (!state.create.drawing) return;
   const point = createPointer(event);
-  const points = state.create.points.map((storedPoint) => ({
-    x: storedPoint.x * els.createCanvas.width,
-    y: storedPoint.y * els.createCanvas.height
-  }));
+  const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
   const previous = points[points.length - 1];
   if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3) return;
   points.push(point);
@@ -2397,7 +2446,7 @@ function continueCreateStroke(event) {
 function endCreateStroke(event) {
   if (!state.create.drawing) return;
   continueCreateStroke(event);
-  const points = createLinePixels(els.createCanvas.width, els.createCanvas.height);
+  const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
   if (points.length < 2) {
     points.push({ x: els.createCanvas.width - points[0].x, y: els.createCanvas.height - points[0].y });
     state.create.points = normalizeCreatePoints(points, els.createCanvas.width, els.createCanvas.height);
