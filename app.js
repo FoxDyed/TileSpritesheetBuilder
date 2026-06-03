@@ -5,6 +5,7 @@ const state = {
   tileHeight: 64,
   spriteWidth: 128,
   spriteHeight: 128,
+  tileMode: "isometric",
   exportCols: 8,
   tiles: [],
   selectedTileId: null,
@@ -70,6 +71,7 @@ const els = {
   tileHeight: document.querySelector("#tileHeight"),
   spriteWidth: document.querySelector("#spriteWidth"),
   spriteHeight: document.querySelector("#spriteHeight"),
+  tileMode: document.querySelector("#tileMode"),
   exportCols: document.querySelector("#exportCols"),
   applySettings: document.querySelector("#applySettings"),
   saveProject: document.querySelector("#saveProject"),
@@ -297,6 +299,7 @@ function readSettings() {
     tileHeight: clampNumber(els.tileHeight.value, 8, 1024, state.tileHeight),
     spriteWidth: clampNumber(els.spriteWidth.value, 8, 2048, state.spriteWidth),
     spriteHeight: clampNumber(els.spriteHeight.value, 8, 2048, state.spriteHeight),
+    tileMode: supportedTileMode(els.tileMode.value),
     exportCols: clampNumber(els.exportCols.value, 1, 64, state.exportCols)
   };
 }
@@ -308,13 +311,14 @@ function syncSettingsControls() {
   els.tileHeight.value = state.tileHeight;
   els.spriteWidth.value = state.spriteWidth;
   els.spriteHeight.value = state.spriteHeight;
+  els.tileMode.value = state.tileMode;
   els.exportCols.value = state.exportCols;
 }
 
 function applySettings() {
   const next = readSettings();
   const resolutionChanged = next.spriteWidth !== state.spriteWidth || next.spriteHeight !== state.spriteHeight;
-  const gridScaleChanged = next.tileWidth !== state.tileWidth || next.tileHeight !== state.tileHeight;
+  const gridScaleChanged = next.tileWidth !== state.tileWidth || next.tileHeight !== state.tileHeight || next.tileMode !== state.tileMode;
   const gridChanged = next.cols !== state.cols || next.rows !== state.rows;
 
   Object.assign(state, next);
@@ -337,7 +341,7 @@ function applySettings() {
   if (resolutionChanged) {
     setStatus("Sprite size changed. Existing palette was preserved; new imports and exports use the updated sprite size.");
   } else if (gridChanged || gridScaleChanged) {
-    setStatus("Grid settings applied.");
+    setStatus(`Grid settings applied for ${tileModeLabel(state.tileMode)} mode.`);
   } else {
     setStatus("Project settings applied.");
   }
@@ -377,20 +381,44 @@ function initializeTheme() {
   applyTheme(storedTheme || preferredTheme);
 }
 
+function supportedTileMode(mode) {
+  return ["isometric", "orthographic", "topdown"].includes(mode) ? mode : "isometric";
+}
+
+function tileModeLabel(mode = state.tileMode) {
+  if (mode === "orthographic") return "orthographic";
+  if (mode === "topdown") return "top-down";
+  return "isometric";
+}
+
 function resizeGridCanvas() {
   const pad = getGridPadding();
-  els.gridCanvas.width = Math.ceil((state.cols + state.rows) * state.tileWidth / 2 + pad * 2);
-  els.gridCanvas.height = Math.ceil((state.cols + state.rows) * state.tileHeight / 2 + state.tileHeight + pad * 2);
+  if (state.tileMode === "isometric") {
+    els.gridCanvas.width = Math.ceil((state.cols + state.rows) * state.tileWidth / 2 + pad * 2);
+    els.gridCanvas.height = Math.ceil((state.cols + state.rows) * state.tileHeight / 2 + state.tileHeight + pad * 2);
+    return;
+  }
+  els.gridCanvas.width = Math.ceil(state.cols * state.tileWidth + pad * 2);
+  els.gridCanvas.height = Math.ceil(state.rows * state.tileHeight + pad * 2);
 }
 
 function getGridPadding() {
-  return Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+  if (state.tileMode === "isometric") {
+    return Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+  }
+  return Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
 }
 
 function cellCenter(x, y) {
+  const pad = getGridPadding();
+  if (state.tileMode !== "isometric") {
+    return {
+      x: pad + x * state.tileWidth + state.tileWidth / 2,
+      y: pad + y * state.tileHeight + state.tileHeight / 2
+    };
+  }
   const halfW = state.tileWidth / 2;
   const halfH = state.tileHeight / 2;
-  const pad = getGridPadding();
   return {
     x: pad + (state.rows - 1) * halfW + halfW + (x - y) * halfW,
     y: pad + halfH + (x + y) * halfH
@@ -398,6 +426,13 @@ function cellCenter(x, y) {
 }
 
 function cellFromPoint(px, py) {
+  if (state.tileMode !== "isometric") {
+    const pad = getGridPadding();
+    const x = Math.floor((px - pad) / state.tileWidth);
+    const y = Math.floor((py - pad) / state.tileHeight);
+    if (x < 0 || y < 0 || x >= state.cols || y >= state.rows) return null;
+    return { x, y };
+  }
   const halfW = state.tileWidth / 2;
   const halfH = state.tileHeight / 2;
   const origin = cellCenter(0, 0);
@@ -413,15 +448,19 @@ function cellFromPoint(px, py) {
   return inside ? { x, y } : null;
 }
 
-function drawDiamond(ctx, x, y, options = {}) {
+function drawGridCell(ctx, x, y, options = {}) {
   const center = cellCenter(x, y);
-  const halfW = state.tileWidth / 2;
-  const halfH = state.tileHeight / 2;
   ctx.beginPath();
-  ctx.moveTo(center.x, center.y - halfH);
-  ctx.lineTo(center.x + halfW, center.y);
-  ctx.lineTo(center.x, center.y + halfH);
-  ctx.lineTo(center.x - halfW, center.y);
+  if (state.tileMode === "isometric") {
+    const halfW = state.tileWidth / 2;
+    const halfH = state.tileHeight / 2;
+    ctx.moveTo(center.x, center.y - halfH);
+    ctx.lineTo(center.x + halfW, center.y);
+    ctx.lineTo(center.x, center.y + halfH);
+    ctx.lineTo(center.x - halfW, center.y);
+  } else {
+    ctx.rect(center.x - state.tileWidth / 2, center.y - state.tileHeight / 2, state.tileWidth, state.tileHeight);
+  }
   ctx.closePath();
   ctx.strokeStyle = options.stroke || cssVar("--grid-line");
   ctx.lineWidth = options.lineWidth || 1;
@@ -440,6 +479,14 @@ function tileDrawRect(tile, cell) {
     return {
       x: center.x - tile.anchor.x,
       y: center.y - tile.anchor.y,
+      width,
+      height
+    };
+  }
+  if (state.tileMode === "topdown") {
+    return {
+      x: center.x - width / 2,
+      y: center.y - height / 2,
       width,
       height
     };
@@ -483,12 +530,12 @@ function renderGrid() {
 
   for (let y = 0; y < state.rows; y += 1) {
     for (let x = 0; x < state.cols; x += 1) {
-      drawDiamond(gridCtx, x, y);
+      drawGridCell(gridCtx, x, y);
     }
   }
 
   if (state.hoverCell) {
-    drawDiamond(gridCtx, state.hoverCell.x, state.hoverCell.y, {
+    drawGridCell(gridCtx, state.hoverCell.x, state.hoverCell.y, {
       stroke: cssVar("--accent"),
       lineWidth: 2,
       fill: cssVar("--grid-hover")
@@ -510,7 +557,7 @@ function renderGrid() {
   const selectionValid = !state.groupMoveOrigin || !state.hoverCell || canPlaceGroup(selectedPlacements);
   for (const placement of selectedPlacements) {
     if (placement.x < 0 || placement.y < 0 || placement.x >= state.cols || placement.y >= state.rows) continue;
-    drawDiamond(gridCtx, placement.x, placement.y, {
+    drawGridCell(gridCtx, placement.x, placement.y, {
       stroke: selectionValid ? cssVar("--accent") : "#a23226",
       lineWidth: 3,
       fill: cssVar("--grid-hover")
@@ -1768,6 +1815,7 @@ function saveProject() {
       tileHeight: state.tileHeight,
       spriteWidth: state.spriteWidth,
       spriteHeight: state.spriteHeight,
+      tileMode: state.tileMode,
       exportCols: state.exportCols
     },
     tiles: serializeTiles(),
@@ -1878,6 +1926,7 @@ function deserializeProjectSettings(settings) {
     tileHeight: clampNumber(settings.tileHeight, 8, 1024, 64),
     spriteWidth: clampNumber(settings.spriteWidth, 8, 2048, 128),
     spriteHeight: clampNumber(settings.spriteHeight, 8, 2048, 128),
+    tileMode: supportedTileMode(settings.tileMode),
     exportCols: clampNumber(settings.exportCols, 1, 64, 8)
   };
 }
@@ -2381,14 +2430,23 @@ function drawCropGridOverlay() {
   const scaleY = els.cropCanvas.height / cropState.outputHeight;
   const centerX = anchor.x * scaleX;
   const centerY = anchor.y * scaleY;
-  const halfWidth = state.tileWidth / 2 * scaleX;
-  const halfHeight = state.tileHeight / 2 * scaleY;
   cropCtx.save();
   cropCtx.beginPath();
-  cropCtx.moveTo(centerX, centerY - halfHeight);
-  cropCtx.lineTo(centerX + halfWidth, centerY);
-  cropCtx.lineTo(centerX, centerY + halfHeight);
-  cropCtx.lineTo(centerX - halfWidth, centerY);
+  if (state.tileMode === "isometric") {
+    const halfWidth = state.tileWidth / 2 * scaleX;
+    const halfHeight = state.tileHeight / 2 * scaleY;
+    cropCtx.moveTo(centerX, centerY - halfHeight);
+    cropCtx.lineTo(centerX + halfWidth, centerY);
+    cropCtx.lineTo(centerX, centerY + halfHeight);
+    cropCtx.lineTo(centerX - halfWidth, centerY);
+  } else {
+    cropCtx.rect(
+      centerX - state.tileWidth / 2 * scaleX,
+      centerY - state.tileHeight / 2 * scaleY,
+      state.tileWidth * scaleX,
+      state.tileHeight * scaleY
+    );
+  }
   cropCtx.closePath();
   cropCtx.fillStyle = cssVar("--grid-hover");
   cropCtx.strokeStyle = cssVar("--accent");
@@ -2832,7 +2890,7 @@ function exportMapImage() {
     return;
   }
 
-  downloadSceneImage(map, `isometric-map-${state.cols}x${state.rows}.png`);
+  downloadSceneImage(map, `${filenameSlug(tileModeLabel())}-map-${state.cols}x${state.rows}.png`);
   setStatus(`Exported full scene as ${map.width}x${map.height} PNG from ${placements.length} visible tiles.`);
 }
 
@@ -2848,7 +2906,7 @@ function exportActiveLayerImage() {
     return;
   }
 
-  downloadSceneImage(map, `isometric-layer-${filenameSlug(layer.name)}-${state.cols}x${state.rows}.png`);
+  downloadSceneImage(map, `${filenameSlug(tileModeLabel())}-layer-${filenameSlug(layer.name)}-${state.cols}x${state.rows}.png`);
   setStatus(`Exported ${layer.name} as ${map.width}x${map.height} PNG from ${placements.length} tiles.`);
 }
 
@@ -3285,6 +3343,7 @@ window.__tileBuilderDebug = {
       tileHeight: state.tileHeight,
       spriteWidth: state.spriteWidth,
       spriteHeight: state.spriteHeight,
+      tileMode: state.tileMode,
       exportCols: state.exportCols,
       viewerScale: state.viewerScale,
       placedCount: placedTileCount(),

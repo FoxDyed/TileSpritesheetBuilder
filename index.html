@@ -43,6 +43,14 @@
             <p class="panel-description">These dimensions are shared with placement and export.</p>
             <div class="field-grid">
               <label>
+                Tile mode
+                <select id="tileMode">
+                  <option value="isometric">Isometric diamond</option>
+                  <option value="orthographic">Orthographic grid</option>
+                  <option value="topdown">Top-down grid</option>
+                </select>
+              </label>
+              <label>
                 Columns
                 <input id="gridCols" type="number" min="1" max="64" value="8">
               </label>

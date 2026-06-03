@@ -1,29 +1,32 @@
-# Isometric Tile Spritesheet Builder
+# Tile Spritesheet Builder
 
-A static GitHub Pages tool for turning individual PNG tiles into a Godot-ready
-spritesheet.
+A static GitHub Pages tool for turning individual PNG tiles into Godot-ready
+spritesheets, maps, and terrain-layer exports.
 
 Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
 
 ## Features
 
-- Work through separate Project, Import, Palette, Place, and Export screens while project data stays shared.
+- Work through separate Project, Import, Palette, Create, Place, Cull, and Export screens while project data stays shared.
+- Build projects in isometric diamond, orthographic grid, or top-down grid modes.
 - Upload one or more PNG files.
 - Crop each incoming PNG with a custom, draggable crop window.
 - Set an intermediate crop and continue refining it before adding the tile to the palette.
 - Auto-crop transparent margins with anchor workspace and optional symmetric X/Y padding while keeping the result editable.
 - Lock crop source scale and nudge or drag tall or wide source images before
   cropping.
-- Align manually cropped sprites against a grid-diamond overlay so oversized art keeps its intended map anchor.
+- Align manually cropped sprites against a mode-aware grid overlay so oversized art keeps its intended map anchor.
 - Import sprite sheets as reusable tile-library entries.
 - Manage palette tiles by cloning, renaming, deleting, re-cropping, rotating, flipping, tinting, or making a chosen color transparent.
 - Keep palette tiles when project settings change, and save or load a palette as a portable JSON file.
 - Save or load a complete project JSON file with settings, palette sprites, layers, and placements.
-- Paint layered isometric maps, rename or reorder layers, and move placed tiles between empty grid cells.
+- Paint layered tile maps, rename or reorder layers, and move placed tiles between empty grid cells.
 - Select multiple placements on the active layer and move them together while preserving their relative positions.
 - Preview the currently selected or moving tile while working in the placement grid.
-- Place cropped tiles onto a custom isometric diamond grid.
+- Place cropped tiles onto a custom isometric, orthographic, or top-down grid.
 - Erase or replace placed tiles.
+- Create transition tiles from palette sprites with editable cut vertices, subgrid snapping, feathering, splatter, noise, and optional decorative top layers.
+- Cull placed layers with editable cut paths so larger terrain sets can be trimmed non-destructively before scene or layer export.
 - Export placed tiles as a packed transparent PNG spritesheet sorted by grid
   row (`y`) and then column (`x`).
 - Export the visible full scene or the selected layer as a transparent PNG.
@@ -66,8 +69,8 @@ npm run install:browsers
 npm test
 ```
 
-The tests open the static page, verify custom grid settings, exercise PNG
-cropping and grid placement, and inspect the exported spritesheet PNG.
+The tests open the static page, verify custom grid and mode settings, exercise
+PNG cropping and grid placement, and inspect exported PNGs.
 
 ## GitHub Pages
 

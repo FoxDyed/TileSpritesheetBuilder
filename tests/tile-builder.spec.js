@@ -225,8 +225,10 @@ async function setProject(page, {
   tileHeight = 32,
   spriteWidth = tileWidth,
   spriteHeight = tileHeight,
-  exportCols = 2
+  exportCols = 2,
+  tileMode = "isometric"
 } = {}) {
+  await page.locator("#tileMode").selectOption(tileMode);
   await page.locator("#gridCols").fill(String(cols));
   await page.locator("#gridRows").fill(String(rows));
   await page.locator("#tileWidth").fill(String(tileWidth));
@@ -261,10 +263,15 @@ async function clickCell(page, x, y) {
     const state = window.__tileBuilderDebug.getState();
     const rect = canvas.getBoundingClientRect();
     const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+    const rectPad = Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
     const halfW = state.tileWidth / 2;
     const halfH = state.tileHeight / 2;
-    const canvasX = pad + (state.rows - 1) * halfW + halfW + (cell.x - cell.y) * halfW;
-    const canvasY = pad + halfH + (cell.x + cell.y) * halfH;
+    const canvasX = state.tileMode === "isometric"
+      ? pad + (state.rows - 1) * halfW + halfW + (cell.x - cell.y) * halfW
+      : rectPad + cell.x * state.tileWidth + halfW;
+    const canvasY = state.tileMode === "isometric"
+      ? pad + halfH + (cell.x + cell.y) * halfH
+      : rectPad + cell.y * state.tileHeight + halfH;
     const clientX = rect.left + (canvasX / canvas.width) * rect.width;
     const clientY = rect.top + (canvasY / canvas.height) * rect.height;
 
@@ -621,6 +628,86 @@ test("draws an editable cull path on a placed layer and applies it to layer expo
   expect(inspected.above[3]).toBe(0);
   expect(inspected.below[0]).toBeGreaterThan(inspected.below[2]);
   expect(inspected.below[3]).toBe(255);
+});
+
+test("places and exports tiles on orthographic and top-down grids", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, {
+    cols: 3,
+    rows: 2,
+    tileWidth: 48,
+    tileHeight: 40,
+    spriteWidth: 48,
+    spriteHeight: 40,
+    tileMode: "orthographic",
+    exportCols: 1
+  });
+  await addTile(page, "red.png", createSolidPng([255, 0, 0, 255]));
+  await clickCell(page, 2, 1);
+  await clickExport(page, "Export Full Scene PNG");
+  let exported = await (await page.waitForFunction(() => window.__lastTileDownload)).jsonValue();
+  let inspected = await page.evaluate(async (href) => {
+    const image = new Image();
+    image.src = href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
+    const sampleX = pad + 2 * state.tileWidth + state.tileWidth / 2;
+    const sampleY = pad + 1 * state.tileHeight + state.tileHeight / 2;
+    return {
+      mode: state.tileMode,
+      size: [image.width, image.height],
+      sample: [...ctx.getImageData(sampleX, sampleY, 1, 1).data]
+    };
+  }, exported.href);
+  expect(inspected.mode).toBe("orthographic");
+  expect(inspected.size).toEqual([192, 128]);
+  expect(inspected.sample[0]).toBeGreaterThan(inspected.sample[2]);
+  expect(inspected.sample[3]).toBe(255);
+
+  await selectControlTab(page, "1. Project");
+  await setProject(page, {
+    cols: 2,
+    rows: 2,
+    tileWidth: 32,
+    tileHeight: 32,
+    spriteWidth: 32,
+    spriteHeight: 32,
+    tileMode: "topdown",
+    exportCols: 1
+  });
+  await addTile(page, "blue.png", createSolidPng([0, 0, 255, 255]));
+  await clickCell(page, 1, 1);
+  await clickExport(page, "Export Full Scene PNG");
+  exported = await page.evaluate(() => window.__lastTileDownload);
+  inspected = await page.evaluate(async (href) => {
+    const image = new Image();
+    image.src = href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
+    const sampleX = pad + state.tileWidth + state.tileWidth / 2;
+    const sampleY = pad + state.tileHeight + state.tileHeight / 2;
+    return {
+      mode: state.tileMode,
+      size: [image.width, image.height],
+      sample: [...ctx.getImageData(sampleX, sampleY, 1, 1).data]
+    };
+  }, exported.href);
+  expect(inspected.mode).toBe("topdown");
+  expect(inspected.size).toEqual([112, 112]);
+  expect(inspected.sample[2]).toBeGreaterThan(inspected.sample[0]);
+  expect(inspected.sample[3]).toBe(255);
 });
 
 test("manages palette tiles with clone, rename, transforms, re-cropping, recolor, transparency, and delete", async ({ page }) => {
