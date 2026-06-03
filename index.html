@@ -9,7 +9,7 @@
   <body>
     <header class="app-header">
       <div>
-        <p class="eyebrow">Godot tile workflow</p>
+        <p class="eyebrow">Tile workflow</p>
         <h1>Tile Spritesheet Builder</h1>
       </div>
       <div class="header-actions">
@@ -35,7 +35,7 @@
         <div class="screen-heading">
           <p class="eyebrow">Step 1</p>
           <h2>Project Setup</h2>
-          <p>Configure the shared grid and sprite dimensions before importing, placing, or exporting tiles.</p>
+          <p>Choose the tile projection, grid size, and sprite dimensions used throughout the project.</p>
         </div>
         <div class="project-layout">
           <section class="feature-panel">
@@ -59,11 +59,11 @@
                 <input id="gridRows" type="number" min="1" max="64" value="8">
               </label>
               <label>
-                Grid width
+                Cell width
                 <input id="tileWidth" type="number" min="8" max="1024" value="128">
               </label>
               <label>
-                Grid height
+                Cell height
                 <input id="tileHeight" type="number" min="8" max="1024" value="64">
               </label>
               <label>
@@ -79,7 +79,7 @@
           </section>
           <section class="feature-panel">
             <h3>Project Files</h3>
-            <p class="panel-description">Save or restore the complete workspace: settings, palette sprites, layers, and placements.</p>
+            <p class="panel-description">Save or restore settings, palette sprites, layers, placements, transition cuts, and cull paths.</p>
             <div class="project-file-tools">
               <button id="saveProject" class="secondary-button" type="button">Save Project</button>
               <label class="file-picker">
@@ -95,12 +95,12 @@
         <div class="screen-heading">
           <p class="eyebrow">Step 2</p>
           <h2>Import Sprites</h2>
-          <p>Load individual PNGs into the crop editor or slice a sprite sheet into reusable palette entries.</p>
+          <p>Add individual PNGs or slice a sprite sheet into reusable palette tiles.</p>
         </div>
         <div class="import-layout">
           <section class="feature-panel">
             <h3>Sprite Sources</h3>
-            <p class="panel-description">Individual files open the crop editor. Sprite sheets are sliced using the configured sprite size.</p>
+            <p class="panel-description">Single PNGs open the crop editor. Sprite sheets use the Project tab sprite size.</p>
             <label class="file-picker">
               <span>Add PNGs</span>
               <input id="fileInput" type="file" accept="image/png" multiple>
@@ -127,12 +127,12 @@
         <div class="screen-heading">
           <p class="eyebrow">Step 3</p>
           <h2>Manage Palette</h2>
-          <p>Review imported sprites, remove tiles you do not need, or apply simple edits before placing them on the map.</p>
+          <p>Preview, rename, clone, crop, transform, and lightly recolor palette tiles before placement.</p>
         </div>
         <div class="palette-manager-layout">
           <section class="feature-panel palette-library-panel">
             <h3>Sprite Library</h3>
-            <p class="panel-description">Select a tile to preview and edit it. Changes are shared with placement and export.</p>
+            <p class="panel-description">Select a tile to preview or edit it. These tiles are the source for Create and Place.</p>
             <div class="palette-file-tools">
               <button id="savePalette" class="secondary-button" type="button">Save Palette</button>
               <label class="file-picker">
@@ -211,7 +211,7 @@
         <div class="create-layout">
           <section class="feature-panel create-tool-panel">
             <h3>Transition Source</h3>
-            <p class="panel-description">Tile A is the under layer. Tile B is masked over one side of the drawn cut.</p>
+            <p class="panel-description">Tile A is the base. Tile B appears on the chosen side of the drawn cut.</p>
             <label>
               Tile A
               <select id="createTileA">
@@ -322,7 +322,7 @@
           <div>
             <p class="eyebrow">Step 5</p>
             <h2>Place Sprites</h2>
-            <p class="panel-description">Choose a palette sprite, then paint, move, or erase it on the isometric grid.</p>
+            <p class="panel-description">Choose a palette tile, then paint, move, or erase it on the project grid.</p>
           </div>
           <div class="tool-row" role="group" aria-label="Grid tools">
             <button id="paintTool" class="tool-button is-active" type="button">Paint</button>
@@ -380,7 +380,7 @@
           <div class="canvas-toolbar">
             <div class="viewer-meta">
               <span id="hoverCell">Cell: none</span>
-              <span>Y sort export: row first, then column</span>
+              <span>Export order: row first, then column</span>
             </div>
             <div class="zoom-controls" aria-label="Grid viewer zoom controls">
               <button id="zoomOut" class="zoom-button" type="button" aria-label="Zoom out">-</button>
@@ -390,7 +390,7 @@
             </div>
           </div>
           <div class="canvas-scroll">
-            <canvas id="gridCanvas" width="900" height="620" aria-label="Isometric tile placement grid"></canvas>
+            <canvas id="gridCanvas" width="900" height="620" aria-label="Tile placement grid"></canvas>
           </div>
         </section>
       </section>
@@ -404,7 +404,7 @@
         <div class="cull-layout">
           <section class="feature-panel cull-tool-panel">
             <h3>Layer Cut</h3>
-            <p class="panel-description">Select a placed layer, draw a cut path, then choose which side of that path stays visible in scene and layer exports.</p>
+            <p class="panel-description">Select a placed layer, draw a cut path, then choose which side stays visible in scene and layer exports.</p>
             <label>
               Layer
               <select id="cullLayerSelect"></select>
@@ -464,7 +464,7 @@
         <div class="screen-heading">
           <p class="eyebrow">Step 7</p>
           <h2>Export</h2>
-          <p>Review the shared project state and download either a Godot-ready packed sprite sheet or a rendered map PNG.</p>
+          <p>Check the project state and download a packed sprite sheet, full scene, or active layer PNG.</p>
         </div>
         <div class="export-layout">
           <section class="feature-panel">
@@ -491,7 +491,7 @@
           </section>
           <section class="feature-panel">
             <h3>Downloads</h3>
-            <p class="panel-description">Packed sheets use Y-then-X placement order. Scene PNGs render visible layers. Layer PNGs preserve the selected layer on a transparent canvas.</p>
+            <p class="panel-description">Packed sheets use row-first order. Scene PNGs render visible layers. Layer PNGs keep the selected layer on a transparent canvas.</p>
             <label>
               Sprite sheet columns
               <input id="exportCols" type="number" min="1" max="64" value="8">
@@ -514,7 +514,7 @@
           <button id="skipCrop" class="icon-button" value="skip" type="button" aria-label="Skip this PNG">&times;</button>
         </div>
         <canvas id="cropCanvas" width="560" height="280"></canvas>
-        <p class="crop-guide-description">The diamond overlay is the grid tile anchor. Drag or nudge the sprite around it to control how oversized art sits on the map.</p>
+        <p class="crop-guide-description">The overlay is the grid tile anchor. Drag or nudge the sprite around it to control how oversized art sits on the map.</p>
         <fieldset class="crop-tool-group">
           <legend>Crop window</legend>
           <div class="crop-size-tools">

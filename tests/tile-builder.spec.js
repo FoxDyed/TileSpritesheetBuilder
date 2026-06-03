@@ -1200,7 +1200,7 @@ test("auto crops visible pixels with optional padding and keeps the result edita
   expect(inspected.visibleSample[3]).toBe(255);
 });
 
-test("uses the crop diamond overlay as the placement anchor for oversized sprites", async ({ page }) => {
+test("uses the crop overlay as the placement anchor for oversized sprites", async ({ page }) => {
   await openApp(page);
   await setProject(page, {
     cols: 3,
@@ -1225,7 +1225,7 @@ test("uses the crop diamond overlay as the placement anchor for oversized sprite
 
   await expect(page.locator("#cropDialog")).toHaveJSProperty("open", true);
   await expect(page.locator(".crop-guide-description")).toHaveText(
-    "The diamond overlay is the grid tile anchor. Drag or nudge the sprite around it to control how oversized art sits on the map."
+    "The overlay is the grid tile anchor. Drag or nudge the sprite around it to control how oversized art sits on the map."
   );
   await page.locator("#cropWidth").fill("120");
   await page.locator("#cropHeight").fill("140");

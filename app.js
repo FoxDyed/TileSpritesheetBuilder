@@ -1541,7 +1541,7 @@ function updateToolButtons() {
 
 function updateStats() {
   const placements = placedTileCount();
-  const gridSize = `${state.cols} x ${state.rows}`;
+  const gridSize = `${tileModeLabel(state.tileMode)} · ${state.cols} x ${state.rows}`;
   els.placedCount.textContent = String(placements);
   els.selectedTileName.textContent = selectedTileLabel();
   els.importedTileCount.textContent = String(state.tiles.length);
@@ -1550,6 +1550,7 @@ function updateStats() {
   els.exportPlacedCount.textContent = String(placements);
   els.exportLayerCount.textContent = String(state.layers.length);
   els.exportGridSize.textContent = gridSize;
+  els.gridCanvas.setAttribute("aria-label", `${tileModeLabel(state.tileMode)} placement grid`);
   updatePaletteEditor();
   updatePlacementPreview();
   updateToolButtons();
