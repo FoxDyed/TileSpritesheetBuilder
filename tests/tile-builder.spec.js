@@ -204,7 +204,7 @@ const pngs = {
 
 async function openApp(page) {
   await page.goto(appUrl);
-  await expect(page).toHaveTitle("Isometric Tile Spritesheet Builder");
+  await expect(page).toHaveTitle("Tile Spritesheet Builder");
   await expect(page.locator("#projectScreen")).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 }

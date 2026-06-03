@@ -3,7 +3,7 @@
 A static GitHub Pages tool for turning individual PNG tiles into Godot-ready
 spritesheets, maps, and terrain-layer exports.
 
-Live site: <https://foxdyed.github.io/BlenderTextureExporting/>
+Live site: <https://foxdyed.github.io/TileSpritesheetBuilder/>
 
 ## Features
 
@@ -79,7 +79,7 @@ GitHub Pages from `main`.
 
 If Pages is not already enabled, set **Settings -> Pages -> Build and deployment
 -> Source** to **GitHub Actions**. After the workflow finishes, the app will be
-available at <https://foxdyed.github.io/BlenderTextureExporting/>.
+available at <https://foxdyed.github.io/TileSpritesheetBuilder/>.
 
 ## Godot
 

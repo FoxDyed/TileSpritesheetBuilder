@@ -1,5 +1,5 @@
 {
-  "name": "isometric-tile-spritesheet-builder",
+  "name": "tile-spritesheet-builder",
   "version": "1.0.0",
   "private": true,
   "description": "Static GitHub Pages tool for building Godot-ready isometric tile spritesheets.",
