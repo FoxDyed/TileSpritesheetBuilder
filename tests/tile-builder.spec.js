@@ -513,6 +513,32 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
     canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, ...point(canvas.width * 0.82, canvas.height * 0.42) }));
     canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, ...point(canvas.width - 8, canvas.height * 0.52) }));
   });
+  const createPointsBeforeVertexMiss = await page.evaluate(() => window.__tileBuilderDebug.getState().create.points);
+  await page.locator("#createVertexMode").check();
+  await page.locator("#createCanvas").evaluate((canvas) => {
+    const state = window.__tileBuilderDebug.getState();
+    const vertices = state.create.points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+    const candidates = [
+      { x: canvas.width * 0.08, y: canvas.height * 0.08 },
+      { x: canvas.width * 0.5, y: canvas.height * 0.1 },
+      { x: canvas.width * 0.92, y: canvas.height * 0.92 },
+      { x: canvas.width * 0.5, y: canvas.height * 0.92 }
+    ];
+    const miss = candidates.reduce((best, candidate) => {
+      const distance = Math.min(...vertices.map((vertex) => Math.hypot(candidate.x - vertex.x, candidate.y - vertex.y)));
+      return distance > best.distance ? { ...candidate, distance } : best;
+    }, { x: 0, y: 0, distance: -1 });
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 7, ...point(miss.x, miss.y) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 7, ...point(canvas.width * 0.15, canvas.height * 0.85) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 7, ...point(canvas.width * 0.15, canvas.height * 0.85) }));
+  });
+  await expect(page.locator("#createVertexMode")).toBeChecked();
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().create.points)).toEqual(createPointsBeforeVertexMiss);
   await page.locator("#createCanvas").evaluate((canvas) => {
     const state = window.__tileBuilderDebug.getState();
     const vertex = state.create.points[2];
@@ -548,6 +574,7 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
     vertexCount: 6,
     gridDivisions: 8,
     snapToGrid: true,
+    vertexMode: true,
     lineMode: "straight",
     feather: 4,
     splatter: 0,
@@ -567,6 +594,7 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   await expect(page.locator("#createGridDivisions")).toHaveValue("8");
   await expect(page.locator("#createLineMode")).toHaveValue("straight");
   await expect(page.locator("#createSnapToGrid")).toBeChecked();
+  await expect(page.locator("#createVertexMode")).toBeChecked();
   await expect(page.locator("#projectStatus")).toHaveText("Loaded transition settings from red-to-blue.png.");
 });
 
@@ -594,6 +622,45 @@ test("draws an editable cull path on a placed layer and applies it to layer expo
     canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 3, ...point(canvas.width, centerY) }));
     canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, ...point(canvas.width, centerY) }));
   });
+  const cullPointsBeforeVertexMiss = await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull.points);
+  await page.locator("#cullVertexMode").check();
+  await page.locator("#cullCanvas").evaluate((canvas) => {
+    const cull = window.__tileBuilderDebug.getState().layerPlacements[0].cull;
+    const vertices = cull.points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+    const candidates = [
+      { x: canvas.width * 0.08, y: canvas.height * 0.08 },
+      { x: canvas.width * 0.5, y: canvas.height * 0.1 },
+      { x: canvas.width * 0.92, y: canvas.height * 0.92 },
+      { x: canvas.width * 0.5, y: canvas.height * 0.92 }
+    ];
+    const miss = candidates.reduce((best, candidate) => {
+      const distance = Math.min(...vertices.map((vertex) => Math.hypot(candidate.x - vertex.x, candidate.y - vertex.y)));
+      return distance > best.distance ? { ...candidate, distance } : best;
+    }, { x: 0, y: 0, distance: -1 });
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 8, ...point(miss.x, miss.y) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 8, ...point(canvas.width * 0.12, canvas.height * 0.88) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 8, ...point(canvas.width * 0.12, canvas.height * 0.88) }));
+  });
+  await expect(page.locator("#cullVertexMode")).toBeChecked();
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull.points)).toEqual(cullPointsBeforeVertexMiss);
+  await page.locator("#cullCanvas").evaluate((canvas) => {
+    const cull = window.__tileBuilderDebug.getState().layerPlacements[0].cull;
+    const vertex = cull.points[1];
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9, ...point(vertex.x * canvas.width, vertex.y * canvas.height) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 9, ...point(canvas.width * 0.5, vertex.y * canvas.height) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9, ...point(canvas.width * 0.5, vertex.y * canvas.height) }));
+  });
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull.points)).not.toEqual(cullPointsBeforeVertexMiss);
 
   const cullState = await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull);
   expect(cullState).toMatchObject({
@@ -601,6 +668,7 @@ test("draws an editable cull path on a placed layer and applies it to layer expo
     vertexCount: 4,
     gridDivisions: 8,
     snapToGrid: true,
+    vertexMode: true,
     lineMode: "straight"
   });
   expect(cullState.points).toHaveLength(4);
@@ -628,6 +696,87 @@ test("draws an editable cull path on a placed layer and applies it to layer expo
   expect(inspected.above[3]).toBe(0);
   expect(inspected.below[0]).toBeGreaterThan(inspected.below[2]);
   expect(inspected.below[3]).toBe(255);
+});
+
+test("aligns cull preview grid and subgrid with each tile mode", async ({ page }) => {
+  const cases = [
+    { mode: "isometric", cols: 3, rows: 2, tileWidth: 64, tileHeight: 32 },
+    { mode: "orthographic", cols: 3, rows: 2, tileWidth: 48, tileHeight: 40 },
+    { mode: "topdown", cols: 2, rows: 3, tileWidth: 32, tileHeight: 32 }
+  ];
+
+  for (const { mode, cols, rows, tileWidth, tileHeight } of cases) {
+    await openApp(page);
+    await setProject(page, { cols, rows, tileWidth, tileHeight, spriteWidth: tileWidth, spriteHeight: tileHeight, tileMode: mode });
+    await addTile(page, `${mode}.png`, pngs.red);
+    await clickCell(page, 0, 0);
+    await selectControlTab(page, "6. Cull");
+    await page.locator("#cullGridDivisions").fill("4");
+    await page.locator("#cullSnapToGrid").check();
+
+    const preview = await page.evaluate(() => ({
+      cullWidth: document.querySelector("#cullCanvas").width,
+      cullHeight: document.querySelector("#cullCanvas").height,
+      gridWidth: document.querySelector("#gridCanvas").width,
+      gridHeight: document.querySelector("#gridCanvas").height
+    }));
+    expect(preview.cullWidth).toBe(preview.gridWidth);
+    expect(preview.cullHeight).toBe(preview.gridHeight);
+
+    await page.locator("#cullCanvas").evaluate((canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      const point = (x, y) => ({
+        clientX: rect.left + x / canvas.width * rect.width,
+        clientY: rect.top + y / canvas.height * rect.height
+      });
+      canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 10, ...point(0, 0) }));
+      canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 10, ...point(canvas.width, canvas.height) }));
+      canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 10, ...point(canvas.width, canvas.height) }));
+    });
+
+    const cull = await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull);
+    const bounds = await page.evaluate(() => {
+      const state = window.__tileBuilderDebug.getState();
+      const pad = state.tileMode === "isometric"
+        ? Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35))
+        : Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
+      if (state.tileMode !== "isometric") {
+        return {
+          left: pad / document.querySelector("#cullCanvas").width,
+          right: (pad + state.cols * state.tileWidth) / document.querySelector("#cullCanvas").width,
+          top: pad / document.querySelector("#cullCanvas").height,
+          bottom: (pad + state.rows * state.tileHeight) / document.querySelector("#cullCanvas").height
+        };
+      }
+      const halfW = state.tileWidth / 2;
+      const halfH = state.tileHeight / 2;
+      const center = (x, y) => ({
+        x: pad + (state.rows - 1) * halfW + halfW + (x - y) * halfW,
+        y: pad + halfH + (x + y) * halfH
+      });
+      let left = Infinity;
+      let right = -Infinity;
+      let top = Infinity;
+      let bottom = -Infinity;
+      for (let y = 0; y < state.rows; y += 1) {
+        for (let x = 0; x < state.cols; x += 1) {
+          const cell = center(x, y);
+          left = Math.min(left, cell.x - halfW);
+          right = Math.max(right, cell.x + halfW);
+          top = Math.min(top, cell.y - halfH);
+          bottom = Math.max(bottom, cell.y + halfH);
+        }
+      }
+      return {
+        left: left / document.querySelector("#cullCanvas").width,
+        right: right / document.querySelector("#cullCanvas").width,
+        top: top / document.querySelector("#cullCanvas").height,
+        bottom: bottom / document.querySelector("#cullCanvas").height
+      };
+    });
+    expect(cull.points.every((point) => point.x >= bounds.left - 0.001 && point.x <= bounds.right + 0.001)).toBe(true);
+    expect(cull.points.every((point) => point.y >= bounds.top - 0.001 && point.y <= bounds.bottom + 0.001)).toBe(true);
+  }
 });
 
 test("places and exports tiles on orthographic and top-down grids", async ({ page }) => {

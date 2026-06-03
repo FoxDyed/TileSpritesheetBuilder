@@ -23,6 +23,7 @@ const state = {
         vertexCount: 5,
         gridDivisions: 8,
         snapToGrid: false,
+        vertexMode: false,
         lineMode: "smooth",
         feather: 0,
         activeVertexIndex: -1,
@@ -50,6 +51,7 @@ const state = {
     vertexCount: 5,
     gridDivisions: 8,
     snapToGrid: false,
+    vertexMode: false,
     lineMode: "smooth",
     activeVertexIndex: -1,
     draggingVertex: false,
@@ -115,6 +117,7 @@ const els = {
   createGridDivisions: document.querySelector("#createGridDivisions"),
   createLineMode: document.querySelector("#createLineMode"),
   createSnapToGrid: document.querySelector("#createSnapToGrid"),
+  createVertexMode: document.querySelector("#createVertexMode"),
   clearCreateLine: document.querySelector("#clearCreateLine"),
   loadCreatedTile: document.querySelector("#loadCreatedTile"),
   addCreatedTile: document.querySelector("#addCreatedTile"),
@@ -128,6 +131,7 @@ const els = {
   cullGridDivisions: document.querySelector("#cullGridDivisions"),
   cullLineMode: document.querySelector("#cullLineMode"),
   cullSnapToGrid: document.querySelector("#cullSnapToGrid"),
+  cullVertexMode: document.querySelector("#cullVertexMode"),
   cullFeather: document.querySelector("#cullFeather"),
   clearCullLine: document.querySelector("#clearCullLine"),
   cullCanvas: document.querySelector("#cullCanvas"),
@@ -471,6 +475,64 @@ function drawGridCell(ctx, x, y, options = {}) {
   }
 }
 
+function tileGridBounds() {
+  if (state.tileMode !== "isometric") {
+    const pad = getGridPadding();
+    return {
+      left: pad,
+      top: pad,
+      right: pad + state.cols * state.tileWidth,
+      bottom: pad + state.rows * state.tileHeight,
+      width: state.cols * state.tileWidth,
+      height: state.rows * state.tileHeight
+    };
+  }
+
+  const halfW = state.tileWidth / 2;
+  const halfH = state.tileHeight / 2;
+  let left = Infinity;
+  let right = -Infinity;
+  let top = Infinity;
+  let bottom = -Infinity;
+  for (let y = 0; y < state.rows; y += 1) {
+    for (let x = 0; x < state.cols; x += 1) {
+      const center = cellCenter(x, y);
+      left = Math.min(left, center.x - halfW);
+      right = Math.max(right, center.x + halfW);
+      top = Math.min(top, center.y - halfH);
+      bottom = Math.max(bottom, center.y + halfH);
+    }
+  }
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function traceTileGridFootprint(ctx) {
+  if (state.tileMode !== "isometric") {
+    const bounds = tileGridBounds();
+    ctx.rect(bounds.left, bounds.top, bounds.width, bounds.height);
+    return;
+  }
+  const halfW = state.tileWidth / 2;
+  const halfH = state.tileHeight / 2;
+  const top = cellCenter(0, 0);
+  const right = cellCenter(state.cols - 1, 0);
+  const bottom = cellCenter(state.cols - 1, state.rows - 1);
+  const left = cellCenter(0, state.rows - 1);
+  ctx.moveTo(top.x, top.y - halfH);
+  ctx.lineTo(right.x + halfW, right.y);
+  ctx.lineTo(bottom.x, bottom.y + halfH);
+  ctx.lineTo(left.x - halfW, left.y);
+  ctx.closePath();
+}
+
+function drawProjectGrid(ctx) {
+  for (let y = 0; y < state.rows; y += 1) {
+    for (let x = 0; x < state.cols; x += 1) {
+      drawGridCell(ctx, x, y);
+    }
+  }
+}
+
 function tileDrawRect(tile, cell) {
   const center = cellCenter(cell.x, cell.y);
   const width = tile.width || tile.image.naturalWidth || state.spriteWidth;
@@ -528,11 +590,7 @@ function renderGrid() {
   gridCtx.fillStyle = cssVar("--canvas-bg");
   gridCtx.fillRect(0, 0, els.gridCanvas.width, els.gridCanvas.height);
 
-  for (let y = 0; y < state.rows; y += 1) {
-    for (let x = 0; x < state.cols; x += 1) {
-      drawGridCell(gridCtx, x, y);
-    }
-  }
+  drawProjectGrid(gridCtx);
 
   if (state.hoverCell) {
     drawGridCell(gridCtx, state.hoverCell.x, state.hoverCell.y, {
@@ -668,6 +726,7 @@ function deserializeTransitionRecipe(recipe) {
     vertexCount: clampNumber(recipe.vertexCount, 2, 24, Math.min(24, Math.max(2, points.length || 5))),
     gridDivisions: clampNumber(recipe.gridDivisions, 2, 32, 8),
     snapToGrid: recipe.snapToGrid === true,
+    vertexMode: recipe.vertexMode === true,
     lineMode: recipe.lineMode === "straight" ? "straight" : "smooth",
     feather: clampNumber(recipe.feather, 0, 64, 6),
     splatter: clampNumber(recipe.splatter, 0, 100, 18),
@@ -739,6 +798,7 @@ function syncCreateControlsFromState() {
   els.createGridDivisions.value = state.create.gridDivisions;
   els.createLineMode.value = state.create.lineMode;
   els.createSnapToGrid.checked = state.create.snapToGrid;
+  els.createVertexMode.checked = state.create.vertexMode;
   els.createSideUpper.classList.toggle("is-active", state.create.side === "negative");
   els.createSideLower.classList.toggle("is-active", state.create.side === "positive");
   els.addCreatedTile.disabled = !state.create.tileBId;
@@ -1146,6 +1206,7 @@ function transitionRecipeForCurrentTile() {
     vertexCount: state.create.vertexCount,
     gridDivisions: state.create.gridDivisions,
     snapToGrid: state.create.snapToGrid,
+    vertexMode: state.create.vertexMode,
     lineMode: state.create.lineMode,
     feather: state.create.feather,
     splatter: state.create.splatter,
@@ -1206,6 +1267,7 @@ function loadSelectedTransitionRecipe() {
     vertexCount: restored.vertexCount,
     gridDivisions: restored.gridDivisions,
     snapToGrid: restored.snapToGrid,
+    vertexMode: restored.vertexMode,
     lineMode: restored.lineMode,
     feather: restored.feather,
     splatter: restored.splatter,
@@ -1224,6 +1286,7 @@ function defaultCullState() {
     vertexCount: 5,
     gridDivisions: 8,
     snapToGrid: false,
+    vertexMode: false,
     lineMode: "smooth",
     feather: 0,
     activeVertexIndex: -1,
@@ -1249,6 +1312,7 @@ function normalizeCull(cull) {
     vertexCount: clampNumber(cull.vertexCount, 2, 24, Math.min(24, Math.max(2, points.length || 5))),
     gridDivisions: clampNumber(cull.gridDivisions, 2, 32, 8),
     snapToGrid: cull.snapToGrid === true,
+    vertexMode: cull.vertexMode === true,
     lineMode: cull.lineMode === "straight" ? "straight" : "smooth",
     feather: clampNumber(cull.feather, 0, 96, 0),
     activeVertexIndex: -1,
@@ -1295,11 +1359,12 @@ function storedCullLinePixels(cull, width, height) {
 function snapCullPoint(point, cull, width, height) {
   if (!cull.snapToGrid) return point;
   const divisions = Math.max(2, cull.gridDivisions);
-  const cellW = width / divisions;
-  const cellH = height / divisions;
+  const bounds = tileGridBounds();
+  const cellW = bounds.width / divisions;
+  const cellH = bounds.height / divisions;
   return {
-    x: Math.min(width, Math.max(0, Math.round(point.x / cellW) * cellW)),
-    y: Math.min(height, Math.max(0, Math.round(point.y / cellH) * cellH))
+    x: Math.min(bounds.right, Math.max(bounds.left, bounds.left + Math.round((point.x - bounds.left) / cellW) * cellW)),
+    y: Math.min(bounds.bottom, Math.max(bounds.top, bounds.top + Math.round((point.y - bounds.top) / cellH) * cellH))
   };
 }
 
@@ -1328,6 +1393,7 @@ function syncCullControlsFromState() {
   els.cullGridDivisions.value = cull.gridDivisions;
   els.cullLineMode.value = cull.lineMode;
   els.cullSnapToGrid.checked = cull.snapToGrid;
+  els.cullVertexMode.checked = cull.vertexMode;
   els.cullFeather.value = cull.feather;
   els.cullSideUpper.classList.toggle("is-active", cull.side === "negative");
   els.cullSideLower.classList.toggle("is-active", cull.side === "positive");
@@ -1335,19 +1401,23 @@ function syncCullControlsFromState() {
 
 function drawCullSubgrid(width, height, cull) {
   const divisions = Math.max(2, cull.gridDivisions);
+  const bounds = tileGridBounds();
   cullCtx.save();
+  cullCtx.beginPath();
+  traceTileGridFootprint(cullCtx);
+  cullCtx.clip();
   cullCtx.strokeStyle = cull.snapToGrid ? "rgba(32, 118, 109, 0.42)" : "rgba(32, 118, 109, 0.18)";
   cullCtx.lineWidth = 1;
   for (let index = 1; index < divisions; index += 1) {
-    const x = width * index / divisions;
-    const y = height * index / divisions;
+    const x = bounds.left + bounds.width * index / divisions;
+    const y = bounds.top + bounds.height * index / divisions;
     cullCtx.beginPath();
-    cullCtx.moveTo(x, 0);
-    cullCtx.lineTo(x, height);
+    cullCtx.moveTo(x, bounds.top);
+    cullCtx.lineTo(x, bounds.bottom);
     cullCtx.stroke();
     cullCtx.beginPath();
-    cullCtx.moveTo(0, y);
-    cullCtx.lineTo(width, y);
+    cullCtx.moveTo(bounds.left, y);
+    cullCtx.lineTo(bounds.right, y);
     cullCtx.stroke();
   }
   cullCtx.restore();
@@ -1389,6 +1459,7 @@ function drawCullPreview() {
   cullCtx.clearRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
   cullCtx.fillStyle = cssVar("--canvas-bg");
   cullCtx.fillRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
+  drawProjectGrid(cullCtx);
   renderSingleLayerToCanvas(layer, cullCtx);
   const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
   drawCullSubgrid(els.cullCanvas.width, els.cullCanvas.height, cull);
@@ -1832,6 +1903,7 @@ function saveProject() {
         vertexCount: layer.cull.vertexCount,
         gridDivisions: layer.cull.gridDivisions,
         snapToGrid: layer.cull.snapToGrid,
+        vertexMode: layer.cull.vertexMode,
         lineMode: layer.cull.lineMode,
         feather: layer.cull.feather
       } : null
@@ -2973,6 +3045,7 @@ function updateCreatePathControls() {
   state.create.gridDivisions = clampNumber(els.createGridDivisions.value, 2, 32, state.create.gridDivisions);
   state.create.lineMode = els.createLineMode.value === "straight" ? "straight" : "smooth";
   state.create.snapToGrid = els.createSnapToGrid.checked;
+  state.create.vertexMode = els.createVertexMode.checked;
   els.createGridDivisions.value = state.create.gridDivisions;
   if (state.create.snapToGrid && (!previousSnap || state.create.points.length > 0)) {
     const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height)
@@ -2994,6 +3067,7 @@ function beginCreateStroke(event) {
     drawCreatePreview();
     return;
   }
+  if (state.create.vertexMode) return;
   state.create.drawing = true;
   state.create.draggingVertex = false;
   state.create.activeVertexIndex = -1;
@@ -3070,6 +3144,7 @@ function beginCullStroke(event) {
     drawCullPreview();
     return;
   }
+  if (cull.vertexMode) return;
   cull.drawing = true;
   cull.draggingVertex = false;
   cull.activeVertexIndex = -1;
@@ -3134,6 +3209,7 @@ function updateCullControls() {
   cull.gridDivisions = clampNumber(els.cullGridDivisions.value, 2, 32, cull.gridDivisions);
   cull.lineMode = els.cullLineMode.value === "straight" ? "straight" : "smooth";
   cull.snapToGrid = els.cullSnapToGrid.checked;
+  cull.vertexMode = els.cullVertexMode.checked;
   cull.feather = clampNumber(els.cullFeather.value, 0, 96, cull.feather);
   els.cullGridDivisions.value = cull.gridDivisions;
   els.cullFeather.value = cull.feather;
@@ -3237,6 +3313,7 @@ els.createVertexCount.addEventListener("input", setCreateVertexCount);
 els.createGridDivisions.addEventListener("input", updateCreatePathControls);
 els.createLineMode.addEventListener("change", updateCreatePathControls);
 els.createSnapToGrid.addEventListener("change", updateCreatePathControls);
+els.createVertexMode.addEventListener("change", updateCreatePathControls);
 els.createSideUpper.addEventListener("click", () => setCreateSide("negative"));
 els.createSideLower.addEventListener("click", () => setCreateSide("positive"));
 els.clearCreateLine.addEventListener("click", resetCreateLine);
@@ -3250,6 +3327,7 @@ els.cullVertexCount.addEventListener("input", setCullVertexCount);
 els.cullGridDivisions.addEventListener("input", updateCullControls);
 els.cullLineMode.addEventListener("change", updateCullControls);
 els.cullSnapToGrid.addEventListener("change", updateCullControls);
+els.cullVertexMode.addEventListener("change", updateCullControls);
 els.cullFeather.addEventListener("input", updateCullControls);
 els.clearCullLine.addEventListener("click", clearCullLine);
 els.renameLayer.addEventListener("click", renameActiveLayer);
@@ -3365,6 +3443,7 @@ window.__tileBuilderDebug = {
           vertexCount: layer.cull.vertexCount,
           gridDivisions: layer.cull.gridDivisions,
           snapToGrid: layer.cull.snapToGrid,
+          vertexMode: layer.cull.vertexMode,
           lineMode: layer.cull.lineMode,
           feather: layer.cull.feather
         } : null
@@ -3384,6 +3463,7 @@ window.__tileBuilderDebug = {
         vertexCount: state.create.vertexCount,
         gridDivisions: state.create.gridDivisions,
         snapToGrid: state.create.snapToGrid,
+        vertexMode: state.create.vertexMode,
         lineMode: state.create.lineMode,
         activeVertexIndex: state.create.activeVertexIndex,
         feather: state.create.feather,
