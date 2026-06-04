@@ -857,6 +857,15 @@ function renderGrid() {
   gridCtx.fillStyle = cssVar("--canvas-bg");
   gridCtx.fillRect(0, 0, els.gridCanvas.width, els.gridCanvas.height);
 
+  for (const layer of visibleLayers()) {
+    for (const placement of sortedLayerPlacements(layer)) {
+      const tile = state.tiles.find((item) => item.id === placement.tileId);
+      if (!tile) continue;
+      const rect = tileDrawRect(tile, placement);
+      gridCtx.drawImage(tile.image, rect.x, rect.y, rect.width, rect.height);
+    }
+  }
+
   drawProjectGrid(gridCtx);
 
   if (state.hoverCell) {
@@ -865,15 +874,6 @@ function renderGrid() {
       lineWidth: 2,
       fill: cssVar("--grid-hover")
     });
-  }
-
-  for (const layer of visibleLayers()) {
-    for (const placement of sortedLayerPlacements(layer)) {
-      const tile = state.tiles.find((item) => item.id === placement.tileId);
-      if (!tile) continue;
-      const rect = tileDrawRect(tile, placement);
-      gridCtx.drawImage(tile.image, rect.x, rect.y, rect.width, rect.height);
-    }
   }
 
   const selectedPlacements = state.groupMoveOrigin && state.hoverCell
@@ -1312,6 +1312,27 @@ function traceCreatePath(ctx, points, lineMode = state.create.lineMode) {
   ctx.lineTo(last.x, last.y);
 }
 
+const editorLineColors = [
+  "#20766d",
+  "#b44b2d",
+  "#6b62c7",
+  "#c28f1f",
+  "#2f82c7",
+  "#a34891",
+  "#4f8f35",
+  "#cf5f6b"
+];
+
+function editorLineColor(index, active = false) {
+  const color = editorLineColors[index % editorLineColors.length];
+  if (active) return color;
+  const hex = color.replace("#", "");
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, 0.72)`;
+}
+
 function drawCreateSubgrid(width, height) {
   const divisions = Math.max(2, state.create.gridDivisions);
   createCtx.save();
@@ -1438,15 +1459,18 @@ function combineLineMasks(width, height, lineSets, side, feather, lineMode, betw
   output.width = width;
   output.height = height;
   const outputCtx = output.getContext("2d");
-  if (lineSets.length === 0) return output;
+  const drawableLines = lineSets
+    .map((line) => simplifyStrokePoints(line))
+    .filter((line) => line.length >= 2);
+  if (drawableLines.length === 0) return output;
 
-  for (const line of lineSets) {
+  for (const line of drawableLines) {
     const mask = createMaskCanvas(width, height, line, side, feather, lineMode);
     outputCtx.drawImage(mask, 0, 0);
   }
 
-  if (lineSets.length >= 2) {
-    const between = createBetweenLinesMask(width, height, lineSets[0], lineSets[1], lineMode);
+  if (drawableLines.length >= 2) {
+    const between = createBetweenLinesMask(width, height, drawableLines[0], drawableLines[1], lineMode);
     if (betweenMode === "include") {
       outputCtx.clearRect(0, 0, width, height);
       outputCtx.drawImage(between, 0, 0);
@@ -1485,7 +1509,8 @@ function seededNoise(x, y, seed) {
 
 function applyMaskEffects(mask, lineSets, splatter, noise) {
   if (splatter === 0 && noise === 0) return mask;
-  const lines = Array.isArray(lineSets?.[0]) ? lineSets : [lineSets];
+  const lines = (Array.isArray(lineSets?.[0]) ? lineSets : [lineSets]).filter((line) => line.length >= 2);
+  if (lines.length === 0) return mask;
   const seedPoints = lines.flat();
   const ctx = mask.getContext("2d");
   const imageData = ctx.getImageData(0, 0, mask.width, mask.height);
@@ -1528,9 +1553,10 @@ function buildTransitionCanvas() {
 
   if (!tileB) return output;
   const lineSets = allCreateLinePixels(width, height).map((points) => resamplePath(points, state.create.vertexCount));
+  const drawableLineSets = lineSets.filter((points) => points.length >= 2);
   const mask = applyMaskEffects(
-    combineLineMasks(width, height, lineSets, state.create.side, state.create.feather, state.create.lineMode, state.create.betweenMode),
-    lineSets,
+    combineLineMasks(width, height, drawableLineSets, state.create.side, state.create.feather, state.create.lineMode, state.create.betweenMode),
+    drawableLineSets,
     state.create.splatter,
     state.create.noise
   );
@@ -1564,9 +1590,11 @@ function drawCreatePreview() {
   const points = activeCreateLinePixels(width, height);
   drawCreateSubgrid(width, height);
   lineSets.forEach((line, index) => {
+    if (line.length < 2) return;
     createCtx.save();
-    createCtx.strokeStyle = index === state.create.activeLineIndex ? cssVar("--accent-strong") || "#20766d" : "rgba(32, 118, 109, 0.45)";
-    createCtx.lineWidth = index === state.create.activeLineIndex ? Math.max(2, Math.ceil(Math.max(width, height) / 96)) : 1;
+    const active = index === state.create.activeLineIndex;
+    createCtx.strokeStyle = editorLineColor(index, active);
+    createCtx.lineWidth = active ? Math.max(3, Math.ceil(Math.max(width, height) / 96)) : 2;
     createCtx.setLineDash([8, 5]);
     createCtx.beginPath();
     traceCreatePath(createCtx, simplifyStrokePoints(line), state.create.lineMode);
@@ -1991,16 +2019,18 @@ function drawCullPreview() {
   cullCtx.clearRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
   cullCtx.fillStyle = cssVar("--canvas-bg");
   cullCtx.fillRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
-  drawProjectGrid(cullCtx);
   renderSingleLayerToCanvas(layer, cullCtx);
+  drawProjectGrid(cullCtx);
   const lineSets = allCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height)
     .map((points) => resamplePath(points, cull.vertexCount));
   const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
   drawCullSubgrid(els.cullCanvas.width, els.cullCanvas.height, cull);
   lineSets.forEach((line, index) => {
+    if (line.length < 2) return;
     cullCtx.save();
-    cullCtx.strokeStyle = index === cull.activeLineIndex ? cssVar("--accent-strong") || "#20766d" : "rgba(32, 118, 109, 0.45)";
-    cullCtx.lineWidth = index === cull.activeLineIndex ? Math.max(2, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 360)) : 1;
+    const active = index === cull.activeLineIndex;
+    cullCtx.strokeStyle = editorLineColor(index, active);
+    cullCtx.lineWidth = active ? Math.max(3, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 360)) : 2;
     cullCtx.setLineDash([10, 6]);
     cullCtx.beginPath();
     traceCreatePath(cullCtx, simplifyStrokePoints(line), cull.lineMode);
@@ -2013,13 +2043,20 @@ function drawCullPreview() {
 }
 
 function createCullMaskCanvas(width, height, cull) {
-  const lineSets = allCullLinePixels(cull, width, height).map((points) => resamplePath(points, cull.vertexCount));
+  const lineSets = allCullLinePixels(cull, width, height)
+    .map((points) => resamplePath(points, cull.vertexCount))
+    .filter((points) => points.length >= 2);
   return applyMaskEffects(
     combineLineMasks(width, height, lineSets, cull.side, cull.feather, cull.lineMode, cull.betweenMode),
     lineSets,
     cull.splatter,
     cull.noise
   );
+}
+
+function hasDrawableCullLines(cull) {
+  syncEditorLegacyPoints(cull);
+  return cull.cutLines.some((line) => normalizeCutLinePoints(line.points).length >= 2);
 }
 
 function selectedTileLabel() {
@@ -3529,7 +3566,7 @@ function renderSceneLayers(layers) {
     const layerCtx = layerCanvas.getContext("2d");
     layerCtx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
     renderSingleLayerToCanvas(layer, layerCtx);
-    if (layer.cull && layer.cull.enabled && layer.cull.points.length >= 2) {
+    if (layer.cull && layer.cull.enabled && hasDrawableCullLines(layer.cull)) {
       const mask = createCullMaskCanvas(layerCanvas.width, layerCanvas.height, layer.cull);
       layerCtx.save();
       layerCtx.globalCompositeOperation = "destination-in";

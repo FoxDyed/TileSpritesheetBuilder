@@ -765,6 +765,29 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   });
   await page.getByRole("button", { name: "Add Line" }).click();
   await expect(page.locator("#createLineSelect")).toHaveValue("1");
+  const createLineColors = await page.locator("#createCanvas").evaluate((canvas) => {
+    const ctx = canvas.getContext("2d");
+    const state = window.__tileBuilderDebug.getState();
+    const sampleLine = (line) => {
+      const points = line.points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+      const start = points[Math.max(0, Math.floor((points.length - 1) / 2))];
+      const end = points[Math.min(points.length - 1, Math.floor((points.length - 1) / 2) + 1)];
+      const x = Math.round((start.x + end.x) / 2);
+      const y = Math.round((start.y + end.y) / 2);
+      for (let dy = -5; dy <= 5; dy += 1) {
+        for (let dx = -5; dx <= 5; dx += 1) {
+          const pixel = [...ctx.getImageData(x + dx, y + dy, 1, 1).data];
+          const isLineColor = pixel[3] > 180 && !(pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 255);
+          if (isLineColor) return pixel.slice(0, 3);
+        }
+      }
+      return null;
+    };
+    return state.create.cutLines.map(sampleLine);
+  });
+  expect(createLineColors[0]).toBeTruthy();
+  expect(createLineColors[1]).toBeTruthy();
+  expect(createLineColors[0]).not.toEqual(createLineColors[1]);
   const createPattern = await downloadJsonFromClick(page, () => page.locator("#saveCreatePattern").click());
   expect(createPattern.filename).toBe("create-line-pattern.json");
   expect(createPattern.json).toMatchObject({
@@ -808,6 +831,29 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   });
   await page.locator("#addCullLine").click();
   await expect(page.locator("#cullLineSelect")).toHaveValue("1");
+  const cullLineColors = await page.locator("#cullCanvas").evaluate((canvas) => {
+    const ctx = canvas.getContext("2d");
+    const cull = window.__tileBuilderDebug.getState().layerPlacements[0].cull;
+    const sampleLine = (line) => {
+      const points = line.points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+      const start = points[Math.max(0, Math.floor((points.length - 1) / 2))];
+      const end = points[Math.min(points.length - 1, Math.floor((points.length - 1) / 2) + 1)];
+      const x = Math.round((start.x + end.x) / 2);
+      const y = Math.round((start.y + end.y) / 2);
+      for (let dy = -5; dy <= 5; dy += 1) {
+        for (let dx = -5; dx <= 5; dx += 1) {
+          const pixel = [...ctx.getImageData(x + dx, y + dy, 1, 1).data];
+          const isLineColor = pixel[3] > 180 && !(pixel[0] === 255 && pixel[1] === 0 && pixel[2] === 0);
+          if (isLineColor) return pixel.slice(0, 3);
+        }
+      }
+      return null;
+    };
+    return cull.cutLines.map(sampleLine);
+  });
+  expect(cullLineColors[0]).toBeTruthy();
+  expect(cullLineColors[1]).toBeTruthy();
+  expect(cullLineColors[0]).not.toEqual(cullLineColors[1]);
   const cullPattern = await downloadJsonFromClick(page, () => page.locator("#saveCullPattern").click());
   expect(cullPattern.filename).toBe("cull-line-pattern.json");
   expect(cullPattern.json).toMatchObject({
@@ -1271,6 +1317,39 @@ test("uploads, crops, places, erases, and clears a PNG tile", async ({ page }) =
   await expect(page.locator("#placedCount")).toHaveText("1");
   await page.getByRole("button", { name: "Clear Grid" }).click();
   await expect(page.locator("#placedCount")).toHaveText("0");
+});
+
+test("keeps placement grid visible while editing but hides it from scene exports", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 2, rows: 2, tileWidth: 64, tileHeight: 64, spriteWidth: 64, spriteHeight: 64, tileMode: "topdown" });
+  await addTile(page, "red.png", pngs.red);
+  await clickCell(page, 0, 0);
+
+  const editorPixel = await page.locator("#gridCanvas").evaluate((canvas) => {
+    const ctx = canvas.getContext("2d");
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
+    return [...ctx.getImageData(pad, pad + state.tileHeight / 2, 1, 1).data];
+  });
+  expect(editorPixel[3]).toBe(255);
+  expect(editorPixel.slice(0, 3)).not.toEqual([255, 0, 0]);
+
+  await clickExport(page, "Export Full Scene PNG");
+  const exported = await (await page.waitForFunction(() => window.__lastTileDownload)).jsonValue();
+  const exportPixel = await page.evaluate(async (href) => {
+    const image = new Image();
+    image.src = href;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
+    return [...ctx.getImageData(pad, pad + state.tileHeight / 2, 1, 1).data];
+  }, exported.href);
+  expect(exportPixel).toEqual([255, 0, 0, 255]);
 });
 
 test("drop mode moves placed tiles only into empty grid cells", async ({ page }) => {
