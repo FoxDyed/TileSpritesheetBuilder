@@ -770,6 +770,26 @@ button:disabled {
   min-width: 0;
 }
 
+.preview-panel-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preview-panel-heading h3 {
+  margin: 0;
+}
+
+.preview-panel-heading .zoom-controls {
+  gap: 6px;
+}
+
+.preview-panel-heading .zoom-scale {
+  min-width: 132px;
+}
+
 .create-canvas-wrap,
 .cull-canvas-wrap {
   display: grid;
@@ -799,6 +819,7 @@ button:disabled {
   background: transparent;
   image-rendering: pixelated;
   touch-action: none;
+  transform-origin: top left;
 }
 
 .tile-card,

@@ -334,7 +334,15 @@
             </div>
           </section>
           <section class="feature-panel create-preview-panel">
-            <h3>Cut Preview</h3>
+            <div class="preview-panel-heading">
+              <h3>Cut Preview</h3>
+              <div class="zoom-controls" aria-label="Create preview zoom controls">
+                <button id="createZoomOut" class="zoom-button" type="button" aria-label="Zoom out create preview">-</button>
+                <span id="createZoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
+                <button id="createZoomIn" class="zoom-button" type="button" aria-label="Zoom in create preview">+</button>
+                <button id="createZoomReset" class="secondary-button compact-button" type="button">1:1</button>
+              </div>
+            </div>
             <div class="create-canvas-wrap">
               <canvas id="createCanvas" width="512" height="512" aria-label="Draw transition cut line"></canvas>
             </div>
@@ -389,6 +397,10 @@
             <button id="deleteLayer" class="secondary-button" type="button">Delete Layer</button>
           </div>
           <h3>Grid</h3>
+          <label class="checkbox-field">
+            <input id="showPlacementGrid" type="checkbox" checked>
+            Show placement grid
+          </label>
           <button id="clearGrid" class="secondary-button" type="button">Clear Grid</button>
           <dl class="stats">
             <div>
@@ -516,7 +528,15 @@
             <button id="clearCullLine" class="secondary-button" type="button">Reset Line</button>
           </section>
           <section class="feature-panel cull-preview-panel">
-            <h3>Layer Preview</h3>
+            <div class="preview-panel-heading">
+              <h3>Layer Preview</h3>
+              <div class="zoom-controls" aria-label="Cull preview zoom controls">
+                <button id="cullZoomOut" class="zoom-button" type="button" aria-label="Zoom out cull preview">-</button>
+                <span id="cullZoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
+                <button id="cullZoomIn" class="zoom-button" type="button" aria-label="Zoom in cull preview">+</button>
+                <button id="cullZoomReset" class="secondary-button compact-button" type="button">1:1</button>
+              </div>
+            </div>
             <div class="cull-canvas-wrap">
               <canvas id="cullCanvas" width="900" height="620" aria-label="Draw layer cull line"></canvas>
             </div>

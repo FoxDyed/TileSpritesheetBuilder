@@ -7,9 +7,12 @@ const state = {
   spriteHeight: 128,
   tileMode: "isometric",
   exportCols: 8,
+  showPlacementGrid: true,
   tiles: [],
   selectedTileId: null,
   tool: "paint",
+  createPreviewScale: 1,
+  cullPreviewScale: 1,
   layers: [
     {
       id: "layer-1",
@@ -140,6 +143,10 @@ const els = {
   loadCreatedTile: document.querySelector("#loadCreatedTile"),
   addCreatedTile: document.querySelector("#addCreatedTile"),
   createCanvas: document.querySelector("#createCanvas"),
+  createZoomOut: document.querySelector("#createZoomOut"),
+  createZoomIn: document.querySelector("#createZoomIn"),
+  createZoomReset: document.querySelector("#createZoomReset"),
+  createZoomScale: document.querySelector("#createZoomScale"),
   createPreviewStatus: document.querySelector("#createPreviewStatus"),
   cullLayerSelect: document.querySelector("#cullLayerSelect"),
   cullEnabled: document.querySelector("#cullEnabled"),
@@ -161,6 +168,10 @@ const els = {
   cullPatternFileInput: document.querySelector("#cullPatternFileInput"),
   clearCullLine: document.querySelector("#clearCullLine"),
   cullCanvas: document.querySelector("#cullCanvas"),
+  cullZoomOut: document.querySelector("#cullZoomOut"),
+  cullZoomIn: document.querySelector("#cullZoomIn"),
+  cullZoomReset: document.querySelector("#cullZoomReset"),
+  cullZoomScale: document.querySelector("#cullZoomScale"),
   cullPreviewStatus: document.querySelector("#cullPreviewStatus"),
   paintTool: document.querySelector("#paintTool"),
   dropTool: document.querySelector("#dropTool"),
@@ -170,6 +181,7 @@ const els = {
   moveSelectedGroup: document.querySelector("#moveSelectedGroup"),
   cancelGroupMove: document.querySelector("#cancelGroupMove"),
   clearGrid: document.querySelector("#clearGrid"),
+  showPlacementGrid: document.querySelector("#showPlacementGrid"),
   themeToggle: document.querySelector("#themeToggle"),
   exportButton: document.querySelector("#exportButton"),
   exportMapButton: document.querySelector("#exportMapButton"),
@@ -328,6 +340,9 @@ const controlHelp = {
   loadCreatedTile: ["Load Selected", "If the selected palette tile was created here, this restores its saved transition recipe for fine tuning."],
   addCreatedTile: ["Add Transition", "Renders the current transition as a new palette tile. Original Tile A, Tile B, and Tile C stay unchanged."],
   createCanvas: ["Cut Preview", "Draw or edit the active transition line here. Drag vertices to refine the shape; use vertex mode when you only want edits, not a new line."],
+  createZoomOut: ["Create Preview Zoom Out", "Zooms the Create preview out so the whole tile is easier to see while editing cut lines."],
+  createZoomIn: ["Create Preview Zoom In", "Zooms the Create preview in for more precise vertex and edge work."],
+  createZoomReset: ["Create Preview Reset Zoom", "Returns the Create preview to 1:1 scale."],
   paintTool: ["Paint Tool", "Places the selected palette tile onto clicked grid cells on the active layer."],
   dropTool: ["Move Tool", "Picks up an existing placement and drops it somewhere else on the active layer."],
   eraseTool: ["Erase Tool", "Removes placements from clicked cells on the active layer."],
@@ -341,6 +356,7 @@ const controlHelp = {
   addLayer: ["Add Layer", "Creates a new empty placement layer. Use layers to separate ground, props, overlays, or alternate terrain passes."],
   deleteLayer: ["Delete Layer", "Deletes the active layer and its placements. Keep at least one layer in the project."],
   clearGrid: ["Clear Grid", "Removes all placements from the active layer."],
+  showPlacementGrid: ["Show Placement Grid", "Toggles the grid overlay in the Place tab editor. Turn it on to line up tiles precisely; turn it off when you want an unobstructed editing preview. Exports stay grid-free either way."],
   zoomOut: ["Zoom Out", "Zooms the placement canvas out so more of the grid is visible."],
   zoomIn: ["Zoom In", "Zooms the placement canvas in for more precise editing."],
   zoomReset: ["Reset Zoom", "Returns the placement canvas to 1:1 scale."],
@@ -365,6 +381,9 @@ const controlHelp = {
   cullPatternFileInput: ["Load Cull Pattern", "Loads a saved cull pattern onto the selected layer."],
   clearCullLine: ["Reset Cull Line", "Clears the active cull line while keeping the layer and other lines available."],
   cullCanvas: ["Layer Preview", "Draw or adjust layer cull lines over the full grid preview. Empty cells remain visible so cuts can be aligned across the project."],
+  cullZoomOut: ["Cull Preview Zoom Out", "Zooms the Cull preview out so more of the full grid is visible."],
+  cullZoomIn: ["Cull Preview Zoom In", "Zooms the Cull preview in for more precise layer cut editing."],
+  cullZoomReset: ["Cull Preview Reset Zoom", "Returns the Cull preview to 1:1 scale."],
   exportCols: ["Sprite Sheet Columns", "Sets how many palette sprites appear in each row of the exported sprite sheet."],
   exportButton: ["Export PNG", "Downloads a packed palette sprite sheet using the current column count."],
   exportMapButton: ["Export Full Scene PNG", "Downloads the visible placed layers as one rendered scene PNG."],
@@ -574,6 +593,7 @@ function syncSettingsControls() {
   els.spriteHeight.value = state.spriteHeight;
   els.tileMode.value = state.tileMode;
   els.exportCols.value = state.exportCols;
+  els.showPlacementGrid.checked = state.showPlacementGrid;
 }
 
 function applySettings() {
@@ -866,7 +886,7 @@ function renderGrid() {
     }
   }
 
-  drawProjectGrid(gridCtx);
+  if (state.showPlacementGrid) drawProjectGrid(gridCtx);
 
   if (state.hoverCell) {
     drawGridCell(gridCtx, state.hoverCell.x, state.hoverCell.y, {
@@ -1063,6 +1083,10 @@ function syncCreateControlsFromState() {
   els.createDecorationOpacity.value = state.create.decorationOpacity;
   els.createDecorationBlend.value = state.create.decorationBlend;
   els.createBetweenMode.value = state.create.betweenMode === "include" ? "include" : "exclude";
+  els.createBetweenMode.disabled = getEditorLines(state.create).length < 2;
+  els.createBetweenMode.title = els.createBetweenMode.disabled
+    ? "Add a second line to use between-lines masking."
+    : "";
   els.createFeather.value = state.create.feather;
   els.createSplatter.value = state.create.splatter;
   els.createNoise.value = state.create.noise;
@@ -1197,11 +1221,70 @@ function populateLineSelect(select, editor) {
 function snapCreatePoint(point, width, height) {
   if (!state.create.snapToGrid) return point;
   const divisions = Math.max(2, state.create.gridDivisions);
+  if (state.tileMode === "isometric") {
+    return snapIsometricCreatePoint(point, width, height, divisions);
+  }
   const cellW = width / divisions;
   const cellH = height / divisions;
   return {
     x: Math.min(width, Math.max(0, Math.round(point.x / cellW) * cellW)),
     y: Math.min(height, Math.max(0, Math.round(point.y / cellH) * cellH))
+  };
+}
+
+function createIsometricFootprint(width, height) {
+  const targetRatio = state.tileHeight / Math.max(1, state.tileWidth);
+  const maxDiamondWidth = width;
+  const maxDiamondHeight = Math.min(height, maxDiamondWidth * targetRatio);
+  const diamondWidth = Math.min(maxDiamondWidth, maxDiamondHeight / Math.max(0.01, targetRatio));
+  const diamondHeight = diamondWidth * targetRatio;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  return {
+    top: { x: centerX, y: centerY - diamondHeight / 2 },
+    right: { x: centerX + diamondWidth / 2, y: centerY },
+    bottom: { x: centerX, y: centerY + diamondHeight / 2 },
+    left: { x: centerX - diamondWidth / 2, y: centerY }
+  };
+}
+
+function traceCreateSubgridFootprint(ctx, width, height) {
+  if (state.tileMode === "isometric") {
+    const footprint = createIsometricFootprint(width, height);
+    ctx.moveTo(footprint.top.x, footprint.top.y);
+    ctx.lineTo(footprint.right.x, footprint.right.y);
+    ctx.lineTo(footprint.bottom.x, footprint.bottom.y);
+    ctx.lineTo(footprint.left.x, footprint.left.y);
+    ctx.closePath();
+    return;
+  }
+  ctx.rect(0, 0, width, height);
+}
+
+function snapIsometricCreatePoint(point, width, height, divisions) {
+  const footprint = createIsometricFootprint(width, height);
+  const origin = footprint.top;
+  const axisU = {
+    x: footprint.right.x - footprint.top.x,
+    y: footprint.right.y - footprint.top.y
+  };
+  const axisV = {
+    x: footprint.left.x - footprint.top.x,
+    y: footprint.left.y - footprint.top.y
+  };
+  const determinant = axisU.x * axisV.y - axisU.y * axisV.x;
+  if (Math.abs(determinant) < 0.0001) return point;
+  const relative = {
+    x: point.x - origin.x,
+    y: point.y - origin.y
+  };
+  const u = (relative.x * axisV.y - relative.y * axisV.x) / determinant;
+  const v = (axisU.x * relative.y - axisU.y * relative.x) / determinant;
+  const snappedU = Math.min(1, Math.max(0, Math.round(u * divisions) / divisions));
+  const snappedV = Math.min(1, Math.max(0, Math.round(v * divisions) / divisions));
+  return {
+    x: origin.x + axisU.x * snappedU + axisV.x * snappedV,
+    y: origin.y + axisU.y * snappedU + axisV.y * snappedV
   };
 }
 
@@ -1336,8 +1419,32 @@ function editorLineColor(index, active = false) {
 function drawCreateSubgrid(width, height) {
   const divisions = Math.max(2, state.create.gridDivisions);
   createCtx.save();
+  createCtx.beginPath();
+  traceCreateSubgridFootprint(createCtx, width, height);
+  createCtx.clip();
   createCtx.strokeStyle = state.create.snapToGrid ? "rgba(32, 118, 109, 0.42)" : "rgba(32, 118, 109, 0.18)";
   createCtx.lineWidth = 1;
+  if (state.tileMode === "isometric") {
+    const footprint = createIsometricFootprint(width, height);
+    for (let index = 1; index < divisions; index += 1) {
+      const t = index / divisions;
+      const leftEdgePoint = interpolatePoint(footprint.top, footprint.left, t);
+      const rightEdgePoint = interpolatePoint(footprint.right, footprint.bottom, t);
+      createCtx.beginPath();
+      createCtx.moveTo(leftEdgePoint.x, leftEdgePoint.y);
+      createCtx.lineTo(rightEdgePoint.x, rightEdgePoint.y);
+      createCtx.stroke();
+
+      const topEdgePoint = interpolatePoint(footprint.top, footprint.right, t);
+      const bottomEdgePoint = interpolatePoint(footprint.left, footprint.bottom, t);
+      createCtx.beginPath();
+      createCtx.moveTo(topEdgePoint.x, topEdgePoint.y);
+      createCtx.lineTo(bottomEdgePoint.x, bottomEdgePoint.y);
+      createCtx.stroke();
+    }
+    createCtx.restore();
+    return;
+  }
   for (let index = 1; index < divisions; index += 1) {
     const x = width * index / divisions;
     const y = height * index / divisions;
@@ -1612,6 +1719,7 @@ function drawCreatePreview() {
   els.createPreviewStatus.textContent = tileB
     ? `Previewing ${tileB.name} over ${tileA}${decoration}. Add Transition creates a new palette tile.`
     : "Import at least one tile, then choose Tile B.";
+  updatePreviewZoom("create");
 }
 
 function readCreateEffectControls() {
@@ -1924,6 +2032,10 @@ function syncCullControlsFromState() {
   els.cullLayerSelect.value = layer.id;
   els.cullEnabled.checked = cull.enabled;
   els.cullBetweenMode.value = cull.betweenMode === "include" ? "include" : "exclude";
+  els.cullBetweenMode.disabled = getEditorLines(cull).length < 2;
+  els.cullBetweenMode.title = els.cullBetweenMode.disabled
+    ? "Add a second line to use between-lines masking."
+    : "";
   populateLineSelect(els.cullLineSelect, cull);
   els.cullVertexCount.value = cull.vertexCount;
   els.cullGridDivisions.value = cull.gridDivisions;
@@ -2040,6 +2152,7 @@ function drawCullPreview() {
   drawCullVertices(points, cull);
   const placementCount = layer.placements.size;
   els.cullPreviewStatus.textContent = `${layer.name}: ${placementCount} placed tile${placementCount === 1 ? "" : "s"}. ${cull.enabled ? "Cull enabled for exports." : "Cull disabled for exports."}`;
+  updatePreviewZoom("cull");
 }
 
 function createCullMaskCanvas(width, height, cull) {
@@ -2200,6 +2313,71 @@ function stepViewerZoom(direction) {
   const index = currentIndex === -1 ? fallbackIndex : currentIndex;
   const nextIndex = Math.min(viewerZoomLevels.length - 1, Math.max(0, index + direction));
   setViewerScale(viewerZoomLevels[nextIndex]);
+}
+
+function setPlacementGridVisibility(visible) {
+  state.showPlacementGrid = visible === true;
+  els.showPlacementGrid.checked = state.showPlacementGrid;
+  renderGrid();
+  updateContextHelp("showPlacementGrid");
+  setStatus(`Placement grid ${state.showPlacementGrid ? "shown" : "hidden"} in the editor. Exports stay grid-free.`);
+}
+
+function previewScaleLabel(scale) {
+  const percent = Math.round(scale * 100);
+  return scale === 1 ? `Scale: ${percent}% (1:1)` : `Scale: ${percent}%`;
+}
+
+function previewZoomConfig(kind) {
+  return kind === "cull"
+    ? {
+        stateKey: "cullPreviewScale",
+        canvas: els.cullCanvas,
+        out: els.cullZoomOut,
+        in: els.cullZoomIn,
+        reset: els.cullZoomReset,
+        label: els.cullZoomScale
+      }
+    : {
+        stateKey: "createPreviewScale",
+        canvas: els.createCanvas,
+        out: els.createZoomOut,
+        in: els.createZoomIn,
+        reset: els.createZoomReset,
+        label: els.createZoomScale
+      };
+}
+
+function updatePreviewZoom(kind) {
+  const config = previewZoomConfig(kind);
+  const scale = state[config.stateKey];
+  config.canvas.style.transform = `scale(${scale})`;
+  config.canvas.style.width = `${config.canvas.width}px`;
+  config.canvas.style.height = `${config.canvas.height}px`;
+  config.canvas.style.marginRight = `${Math.max(0, config.canvas.width * scale - config.canvas.width)}px`;
+  config.canvas.style.marginBottom = `${Math.max(0, config.canvas.height * scale - config.canvas.height)}px`;
+  config.label.textContent = previewScaleLabel(scale);
+  config.label.classList.toggle("is-scaled", scale !== 1);
+  config.out.disabled = scale === viewerZoomLevels[0];
+  config.in.disabled = scale === viewerZoomLevels[viewerZoomLevels.length - 1];
+}
+
+function setPreviewScale(kind, nextScale) {
+  const config = previewZoomConfig(kind);
+  state[config.stateKey] = Number(nextScale.toFixed(2));
+  updatePreviewZoom(kind);
+}
+
+function stepPreviewZoom(kind, direction) {
+  const config = previewZoomConfig(kind);
+  const currentScale = state[config.stateKey];
+  const currentIndex = viewerZoomLevels.findIndex((level) => level === currentScale);
+  const fallbackIndex = viewerZoomLevels.reduce((best, level, index) => {
+    return Math.abs(level - currentScale) < Math.abs(viewerZoomLevels[best] - currentScale) ? index : best;
+  }, 0);
+  const index = currentIndex === -1 ? fallbackIndex : currentIndex;
+  const nextIndex = Math.min(viewerZoomLevels.length - 1, Math.max(0, index + direction));
+  setPreviewScale(kind, viewerZoomLevels[nextIndex]);
 }
 
 function defaultViewerScaleForViewport() {
@@ -2429,7 +2607,8 @@ function saveProject() {
       spriteWidth: state.spriteWidth,
       spriteHeight: state.spriteHeight,
       tileMode: state.tileMode,
-      exportCols: state.exportCols
+      exportCols: state.exportCols,
+      showPlacementGrid: state.showPlacementGrid
     },
     tiles: serializeTiles(),
     layers: state.layers.map((layer) => ({
@@ -2630,7 +2809,8 @@ function deserializeProjectSettings(settings) {
     spriteWidth: clampNumber(settings.spriteWidth, 8, 2048, 128),
     spriteHeight: clampNumber(settings.spriteHeight, 8, 2048, 128),
     tileMode: supportedTileMode(settings.tileMode),
-    exportCols: clampNumber(settings.exportCols, 1, 64, 8)
+    exportCols: clampNumber(settings.exportCols, 1, 64, 8),
+    showPlacementGrid: settings.showPlacementGrid !== false
   };
 }
 
@@ -3687,8 +3867,8 @@ function updateCreatePathControls() {
 
 function beginCreateStroke(event) {
   if (!state.create.tileBId) return;
-  const point = snapCreatePoint(createPointer(event), els.createCanvas.width, els.createCanvas.height);
-  const vertexIndex = nearestCreateVertex(point);
+  const rawPoint = createPointer(event);
+  const vertexIndex = nearestCreateVertex(rawPoint);
   if (vertexIndex >= 0) {
     state.create.activeVertexIndex = vertexIndex;
     state.create.draggingVertex = true;
@@ -3698,6 +3878,7 @@ function beginCreateStroke(event) {
     return;
   }
   if (state.create.vertexMode) return;
+  const point = snapCreatePoint(rawPoint, els.createCanvas.width, els.createCanvas.height);
   state.create.drawing = true;
   state.create.draggingVertex = false;
   state.create.activeVertexIndex = -1;
@@ -3764,8 +3945,8 @@ function nearestCullVertex(point, cull) {
 function beginCullStroke(event) {
   const layer = cullLayer();
   const cull = layer.cull;
-  const point = snapCullPoint(cullPointer(event), cull, els.cullCanvas.width, els.cullCanvas.height);
-  const vertexIndex = nearestCullVertex(point, cull);
+  const rawPoint = cullPointer(event);
+  const vertexIndex = nearestCullVertex(rawPoint, cull);
   if (vertexIndex >= 0) {
     cull.activeVertexIndex = vertexIndex;
     cull.draggingVertex = true;
@@ -3775,6 +3956,7 @@ function beginCullStroke(event) {
     return;
   }
   if (cull.vertexMode) return;
+  const point = snapCullPoint(rawPoint, cull, els.cullCanvas.width, els.cullCanvas.height);
   cull.drawing = true;
   cull.draggingVertex = false;
   cull.activeVertexIndex = -1;
@@ -3950,6 +4132,7 @@ els.groupMoveTool.addEventListener("click", () => setGridTool("group"));
 els.moveSelectedGroup.addEventListener("click", beginGroupMove);
 els.cancelGroupMove.addEventListener("click", () => cancelGroupMove());
 els.clearGrid.addEventListener("click", clearGrid);
+els.showPlacementGrid.addEventListener("change", () => setPlacementGridVisibility(els.showPlacementGrid.checked));
 els.themeToggle.addEventListener("click", () => {
   applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
 });
@@ -4034,6 +4217,12 @@ els.deleteLayer.addEventListener("click", deleteActiveLayer);
 els.zoomOut.addEventListener("click", () => stepViewerZoom(-1));
 els.zoomIn.addEventListener("click", () => stepViewerZoom(1));
 els.zoomReset.addEventListener("click", () => setViewerScale(1));
+els.createZoomOut.addEventListener("click", () => stepPreviewZoom("create", -1));
+els.createZoomIn.addEventListener("click", () => stepPreviewZoom("create", 1));
+els.createZoomReset.addEventListener("click", () => setPreviewScale("create", 1));
+els.cullZoomOut.addEventListener("click", () => stepPreviewZoom("cull", -1));
+els.cullZoomIn.addEventListener("click", () => stepPreviewZoom("cull", 1));
+els.cullZoomReset.addEventListener("click", () => setPreviewScale("cull", 1));
 window.addEventListener("resize", applyResponsiveViewerScale);
 document.addEventListener("focusin", handleContextHelpEvent);
 document.addEventListener("input", handleContextHelpEvent);
@@ -4104,6 +4293,8 @@ resizeGridCanvas();
 renderPalette();
 renderLayers();
 renderGrid();
+updatePreviewZoom("create");
+updatePreviewZoom("cull");
 applyResponsiveViewerScale();
 updateStats();
 updateContextHelp();
@@ -4120,7 +4311,10 @@ window.__tileBuilderDebug = {
       spriteHeight: state.spriteHeight,
       tileMode: state.tileMode,
       exportCols: state.exportCols,
+      showPlacementGrid: state.showPlacementGrid,
       viewerScale: state.viewerScale,
+      createPreviewScale: state.createPreviewScale,
+      cullPreviewScale: state.cullPreviewScale,
       placedCount: placedTileCount(),
       layerCount: state.layers.length,
       activeLayerId: state.activeLayerId,

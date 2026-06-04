@@ -402,7 +402,7 @@ test("saves and reloads a complete project with settings, sprites, layers, and p
   for await (const chunk of stream) chunks.push(chunk);
   const savedProject = Buffer.concat(chunks);
   const projectJson = JSON.parse(savedProject.toString("utf8"));
-  expect(projectJson.settings).toMatchObject({ cols: 5, rows: 4, tileWidth: 64, tileHeight: 32, exportCols: 3 });
+  expect(projectJson.settings).toMatchObject({ cols: 5, rows: 4, tileWidth: 64, tileHeight: 32, exportCols: 3, showPlacementGrid: true });
   expect(projectJson.tiles.map((tile) => tile.name)).toEqual(["red.png", "blue.png"]);
   expect(projectJson.layers.map((layer) => ({ name: layer.name, visible: layer.visible, placements: layer.placements.length }))).toEqual([
     { name: "Layer 1", visible: false, placements: 1 },
@@ -499,6 +499,7 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await expect(page.locator("#placementPreview")).toHaveClass(/has-tile/);
   await expect(page.locator("#placementPreviewName")).toHaveText("red.png");
   await expect(page.locator("#gridCanvas")).toBeVisible();
+  await expect(page.locator("#showPlacementGrid")).toBeChecked();
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
   await clickCell(page, 1, 1);
 
@@ -506,9 +507,9 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await expect(page.locator("#cullCanvas")).toBeVisible();
   await expect(page.locator("#cullLayerSelect")).toBeVisible();
   await expect(page.locator("#cullPreviewStatus")).toHaveText(/Layer 1: 1 placed tile/);
-  await page.locator("#cullBetweenMode").focus();
-  await expect(page.locator("#contextHelpTitle")).toHaveText("Between Lines");
-  await expect(page.locator("#contextHelpBody")).toContainText("multiple layer cull lines combine");
+  await expect(page.locator("#cullBetweenMode")).toBeDisabled();
+  await page.locator("#cullEnabled").focus();
+  await expect(page.locator("#contextHelpTitle")).toHaveText("Enable Layer Cull");
 
   await selectControlTab(page, "7. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
@@ -559,23 +560,12 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
   const createPointsBeforeVertexMiss = await page.evaluate(() => window.__tileBuilderDebug.getState().create.points);
   await page.locator("#createVertexMode").check();
   await page.locator("#createCanvas").evaluate((canvas) => {
-    const state = window.__tileBuilderDebug.getState();
-    const vertices = state.create.points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
-    const candidates = [
-      { x: canvas.width * 0.08, y: canvas.height * 0.08 },
-      { x: canvas.width * 0.5, y: canvas.height * 0.1 },
-      { x: canvas.width * 0.92, y: canvas.height * 0.92 },
-      { x: canvas.width * 0.5, y: canvas.height * 0.92 }
-    ];
-    const miss = candidates.reduce((best, candidate) => {
-      const distance = Math.min(...vertices.map((vertex) => Math.hypot(candidate.x - vertex.x, candidate.y - vertex.y)));
-      return distance > best.distance ? { ...candidate, distance } : best;
-    }, { x: 0, y: 0, distance: -1 });
     const rect = canvas.getBoundingClientRect();
     const point = (x, y) => ({
       clientX: rect.left + x / canvas.width * rect.width,
       clientY: rect.top + y / canvas.height * rect.height
     });
+    const miss = { x: canvas.width - 2, y: 2 };
     canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 7, ...point(miss.x, miss.y) }));
     canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 7, ...point(canvas.width * 0.15, canvas.height * 0.85) }));
     canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 7, ...point(canvas.width * 0.15, canvas.height * 0.85) }));
@@ -624,8 +614,23 @@ test("creates a non-destructive transition tile with reloadable cut settings", a
     noise: 0
   });
   expect(transition.tile.transition.points.length).toBe(6);
-  expect(transition.tile.transition.points.every((point) => Math.abs(point.x * 8 - Math.round(point.x * 8)) < 0.001)).toBe(true);
-  expect(transition.tile.transition.points.every((point) => Math.abs(point.y * 8 - Math.round(point.y * 8)) < 0.001)).toBe(true);
+  const transitionIsoSnap = transition.tile.transition.points.map((point) => {
+    const pixel = { x: point.x * transition.tile.width, y: point.y * transition.tile.height };
+    const ratio = 32 / 64;
+    const diamondWidth = Math.min(transition.tile.width, transition.tile.height / ratio);
+    const diamondHeight = diamondWidth * ratio;
+    const origin = { x: transition.tile.width / 2, y: transition.tile.height / 2 - diamondHeight / 2 };
+    const axisU = { x: diamondWidth / 2, y: diamondHeight / 2 };
+    const axisV = { x: -diamondWidth / 2, y: diamondHeight / 2 };
+    const determinant = axisU.x * axisV.y - axisU.y * axisV.x;
+    const relative = { x: pixel.x - origin.x, y: pixel.y - origin.y };
+    return {
+      u: (relative.x * axisV.y - relative.y * axisV.x) / determinant,
+      v: (axisU.x * relative.y - axisU.y * relative.x) / determinant
+    };
+  });
+  expect(transitionIsoSnap.every((point) => Math.abs(point.u * 8 - Math.round(point.u * 8)) < 0.001)).toBe(true);
+  expect(transitionIsoSnap.every((point) => Math.abs(point.v * 8 - Math.round(point.v * 8)) < 0.001)).toBe(true);
 
   await page.locator("#createFeather").fill("20");
   await page.locator("#createDecorationOpacity").fill("80");
@@ -750,7 +755,7 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   await selectControlTab(page, "4. Create");
   const ids = await page.evaluate(() => Object.fromEntries(window.__tileBuilderDebug.getState().tiles.map((tile) => [tile.name, tile.id])));
   await page.locator("#createTileB").selectOption(ids["blue.png"]);
-  await page.locator("#createBetweenMode").selectOption("include");
+  await expect(page.locator("#createBetweenMode")).toBeDisabled();
   await page.locator("#createSplatter").fill("12");
   await page.locator("#createNoise").fill("9");
   await page.locator("#createCanvas").evaluate((canvas) => {
@@ -765,6 +770,8 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   });
   await page.getByRole("button", { name: "Add Line" }).click();
   await expect(page.locator("#createLineSelect")).toHaveValue("1");
+  await expect(page.locator("#createBetweenMode")).toBeEnabled();
+  await page.locator("#createBetweenMode").selectOption("include");
   const createLineColors = await page.locator("#createCanvas").evaluate((canvas) => {
     const ctx = canvas.getContext("2d");
     const state = window.__tileBuilderDebug.getState();
@@ -816,7 +823,7 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   await selectControlTab(page, "5. Place");
   await clickCell(page, 1, 1);
   await selectControlTab(page, "6. Cull");
-  await page.locator("#cullBetweenMode").selectOption("include");
+  await expect(page.locator("#cullBetweenMode")).toBeDisabled();
   await page.locator("#cullSplatter").fill("15");
   await page.locator("#cullNoise").fill("7");
   await page.locator("#cullCanvas").evaluate((canvas) => {
@@ -831,6 +838,8 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   });
   await page.locator("#addCullLine").click();
   await expect(page.locator("#cullLineSelect")).toHaveValue("1");
+  await expect(page.locator("#cullBetweenMode")).toBeEnabled();
+  await page.locator("#cullBetweenMode").selectOption("include");
   const cullLineColors = await page.locator("#cullCanvas").evaluate((canvas) => {
     const ctx = canvas.getContext("2d");
     const cull = window.__tileBuilderDebug.getState().layerPlacements[0].cull;
@@ -878,6 +887,71 @@ test("saves and loads reusable create and cull line patterns", async ({ page }) 
   await expect(page.locator("#cullSplatter")).toHaveValue("15");
   await expect(page.locator("#cullNoise")).toHaveValue("7");
   expect(await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull.cutLines)).toHaveLength(2);
+});
+
+test("aligns create subgrid and snapping with isometric tile mode", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 2, rows: 2, tileWidth: 64, tileHeight: 32, spriteWidth: 128, spriteHeight: 128, tileMode: "isometric" });
+  await selectControlTab(page, "4. Create");
+  await page.locator("#createGridDivisions").fill("4");
+  await page.locator("#createSnapToGrid").check();
+
+  const diagonalGridVisible = await page.locator("#createCanvas").evaluate((canvas) => {
+    const ctx = canvas.getContext("2d");
+    const state = window.__tileBuilderDebug.getState();
+    const ratio = state.tileHeight / state.tileWidth;
+    const diamondWidth = Math.min(canvas.width, canvas.height / ratio);
+    const diamondHeight = diamondWidth * ratio;
+    const center = { x: canvas.width / 2, y: canvas.height / 2 };
+    const footprint = {
+      top: { x: center.x, y: center.y - diamondHeight / 2 },
+      right: { x: center.x + diamondWidth / 2, y: center.y },
+      bottom: { x: center.x, y: center.y + diamondHeight / 2 },
+      left: { x: center.x - diamondWidth / 2, y: center.y }
+    };
+    const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    const start = lerp(footprint.top, footprint.left, 0.25);
+    const end = lerp(footprint.right, footprint.bottom, 0.25);
+    const sample = lerp(start, end, 0.5);
+    for (let dy = -3; dy <= 3; dy += 1) {
+      for (let dx = -3; dx <= 3; dx += 1) {
+        if (ctx.getImageData(Math.round(sample.x + dx), Math.round(sample.y + dy), 1, 1).data[3] > 0) return true;
+      }
+    }
+    return false;
+  });
+  expect(diagonalGridVisible).toBe(true);
+
+  await page.locator("#createCanvas").evaluate((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 31, ...point(0, 0) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 31, ...point(canvas.width, canvas.height) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 31, ...point(canvas.width, canvas.height) }));
+  });
+  const isoSnap = await page.locator("#createCanvas").evaluate((canvas) => {
+    const state = window.__tileBuilderDebug.getState();
+    const ratio = state.tileHeight / state.tileWidth;
+    const diamondWidth = Math.min(canvas.width, canvas.height / ratio);
+    const diamondHeight = diamondWidth * ratio;
+    const origin = { x: canvas.width / 2, y: canvas.height / 2 - diamondHeight / 2 };
+    const axisU = { x: diamondWidth / 2, y: diamondHeight / 2 };
+    const axisV = { x: -diamondWidth / 2, y: diamondHeight / 2 };
+    const determinant = axisU.x * axisV.y - axisU.y * axisV.x;
+    return state.create.points.map((point) => {
+      const pixel = { x: point.x * canvas.width, y: point.y * canvas.height };
+      const relative = { x: pixel.x - origin.x, y: pixel.y - origin.y };
+      return {
+        u: (relative.x * axisV.y - relative.y * axisV.x) / determinant,
+        v: (axisU.x * relative.y - axisU.y * relative.x) / determinant
+      };
+    });
+  });
+  expect(isoSnap.every((point) => Math.abs(point.u * 4 - Math.round(point.u * 4)) < 0.001)).toBe(true);
+  expect(isoSnap.every((point) => Math.abs(point.v * 4 - Math.round(point.v * 4)) < 0.001)).toBe(true);
 });
 
 test("aligns cull preview grid and subgrid with each tile mode", async ({ page }) => {
@@ -1182,6 +1256,29 @@ test("zooms the grid viewer and labels non-1:1 preview scale", async ({ page }) 
   await expect(page.locator("#zoomScale")).toHaveClass(/is-scaled/);
 });
 
+test("zooms create and cull preview canvases independently", async ({ page }) => {
+  await openApp(page);
+
+  await selectControlTab(page, "4. Create");
+  await expect(page.locator("#createZoomScale")).toHaveText("Scale: 100% (1:1)");
+  await page.getByRole("button", { name: "Zoom in create preview" }).click();
+  await expect(page.locator("#createZoomScale")).toHaveText("Scale: 125%");
+  await expect(page.locator("#createZoomScale")).toHaveClass(/is-scaled/);
+  await expect(page.locator("#createCanvas")).toHaveCSS("transform", /matrix\(1\.25/);
+
+  await selectControlTab(page, "6. Cull");
+  await expect(page.locator("#cullZoomScale")).toHaveText("Scale: 100% (1:1)");
+  await page.getByRole("button", { name: "Zoom in cull preview" }).click();
+  await expect(page.locator("#cullZoomScale")).toHaveText("Scale: 125%");
+  await expect(page.locator("#cullZoomScale")).toHaveClass(/is-scaled/);
+  await expect(page.locator("#cullCanvas")).toHaveCSS("transform", /matrix\(1\.25/);
+  await expect(page.locator("#createZoomScale")).toHaveText("Scale: 125%");
+
+  await page.locator("#cullZoomReset").click();
+  await expect(page.locator("#cullZoomScale")).toHaveText("Scale: 100% (1:1)");
+  await expect(page.locator("#createZoomScale")).toHaveText("Scale: 125%");
+});
+
 test("toggles dark mode and persists the display preference", async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => localStorage.removeItem("tileBuilderTheme"));
@@ -1319,7 +1416,7 @@ test("uploads, crops, places, erases, and clears a PNG tile", async ({ page }) =
   await expect(page.locator("#placedCount")).toHaveText("0");
 });
 
-test("keeps placement grid visible while editing but hides it from scene exports", async ({ page }) => {
+test("toggles placement grid visibility while keeping scene exports grid-free", async ({ page }) => {
   await openApp(page);
   await setProject(page, { cols: 2, rows: 2, tileWidth: 64, tileHeight: 64, spriteWidth: 64, spriteHeight: 64, tileMode: "topdown" });
   await addTile(page, "red.png", pngs.red);
@@ -1333,6 +1430,32 @@ test("keeps placement grid visible while editing but hides it from scene exports
   });
   expect(editorPixel[3]).toBe(255);
   expect(editorPixel.slice(0, 3)).not.toEqual([255, 0, 0]);
+
+  await page.locator("#showPlacementGrid").uncheck();
+  await expect(page.locator("#projectStatus")).toHaveText("Placement grid hidden in the editor. Exports stay grid-free.");
+  await expect(page.locator("#showPlacementGrid")).not.toBeChecked();
+  const hiddenGridPixel = await page.locator("#gridCanvas").evaluate((canvas) => {
+    const ctx = canvas.getContext("2d");
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(24, Math.ceil(Math.max(state.tileWidth, state.tileHeight, state.spriteWidth, state.spriteHeight) * 0.25));
+    return [...ctx.getImageData(pad, pad + state.tileHeight / 2, 1, 1).data];
+  });
+  expect(hiddenGridPixel).toEqual([255, 0, 0, 255]);
+
+  await selectControlTab(page, "1. Project");
+  const projectWithHiddenGrid = await downloadJsonFromClick(page, () => page.locator("#saveProject").click());
+  expect(projectWithHiddenGrid.json.settings.showPlacementGrid).toBe(false);
+  await selectControlTab(page, "5. Place");
+  await page.locator("#showPlacementGrid").check();
+  await selectControlTab(page, "1. Project");
+  await page.locator("#projectFileInput").setInputFiles({
+    name: "hidden-grid-project.json",
+    mimeType: "application/json",
+    buffer: projectWithHiddenGrid.buffer
+  });
+  await selectControlTab(page, "5. Place");
+  await expect(page.locator("#showPlacementGrid")).not.toBeChecked();
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().showPlacementGrid)).toBe(false);
 
   await clickExport(page, "Export Full Scene PNG");
   const exported = await (await page.waitForFunction(() => window.__lastTileDownload)).jsonValue();
