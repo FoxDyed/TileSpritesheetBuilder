@@ -591,6 +591,13 @@ button:disabled {
   background: var(--panel);
 }
 
+.compact-file-picker span {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
 .palette-preview {
   display: grid;
   place-items: center;

@@ -20,12 +20,17 @@ const state = {
         enabled: false,
         side: "positive",
         points: [],
+        cutLines: [],
+        activeLineIndex: 0,
+        betweenMode: "exclude",
         vertexCount: 5,
         gridDivisions: 8,
         snapToGrid: false,
         vertexMode: false,
         lineMode: "smooth",
         feather: 0,
+        splatter: 0,
+        noise: 0,
         activeVertexIndex: -1,
         drawing: false,
         draggingVertex: false
@@ -48,6 +53,9 @@ const state = {
     decorationBlend: "source-over",
     side: "positive",
     points: [],
+    cutLines: [],
+    activeLineIndex: 0,
+    betweenMode: "exclude",
     vertexCount: 5,
     gridDivisions: 8,
     snapToGrid: false,
@@ -110,14 +118,20 @@ const els = {
   createTileName: document.querySelector("#createTileName"),
   createSideUpper: document.querySelector("#createSideUpper"),
   createSideLower: document.querySelector("#createSideLower"),
+  createBetweenMode: document.querySelector("#createBetweenMode"),
   createFeather: document.querySelector("#createFeather"),
   createSplatter: document.querySelector("#createSplatter"),
   createNoise: document.querySelector("#createNoise"),
   createVertexCount: document.querySelector("#createVertexCount"),
+  createLineSelect: document.querySelector("#createLineSelect"),
   createGridDivisions: document.querySelector("#createGridDivisions"),
   createLineMode: document.querySelector("#createLineMode"),
   createSnapToGrid: document.querySelector("#createSnapToGrid"),
   createVertexMode: document.querySelector("#createVertexMode"),
+  addCreateLine: document.querySelector("#addCreateLine"),
+  deleteCreateLine: document.querySelector("#deleteCreateLine"),
+  saveCreatePattern: document.querySelector("#saveCreatePattern"),
+  createPatternFileInput: document.querySelector("#createPatternFileInput"),
   clearCreateLine: document.querySelector("#clearCreateLine"),
   loadCreatedTile: document.querySelector("#loadCreatedTile"),
   addCreatedTile: document.querySelector("#addCreatedTile"),
@@ -127,12 +141,20 @@ const els = {
   cullEnabled: document.querySelector("#cullEnabled"),
   cullSideUpper: document.querySelector("#cullSideUpper"),
   cullSideLower: document.querySelector("#cullSideLower"),
+  cullBetweenMode: document.querySelector("#cullBetweenMode"),
   cullVertexCount: document.querySelector("#cullVertexCount"),
+  cullLineSelect: document.querySelector("#cullLineSelect"),
   cullGridDivisions: document.querySelector("#cullGridDivisions"),
   cullLineMode: document.querySelector("#cullLineMode"),
   cullSnapToGrid: document.querySelector("#cullSnapToGrid"),
   cullVertexMode: document.querySelector("#cullVertexMode"),
   cullFeather: document.querySelector("#cullFeather"),
+  cullSplatter: document.querySelector("#cullSplatter"),
+  cullNoise: document.querySelector("#cullNoise"),
+  addCullLine: document.querySelector("#addCullLine"),
+  deleteCullLine: document.querySelector("#deleteCullLine"),
+  saveCullPattern: document.querySelector("#saveCullPattern"),
+  cullPatternFileInput: document.querySelector("#cullPatternFileInput"),
   clearCullLine: document.querySelector("#clearCullLine"),
   cullCanvas: document.querySelector("#cullCanvas"),
   cullPreviewStatus: document.querySelector("#cullPreviewStatus"),
@@ -512,17 +534,27 @@ function traceTileGridFootprint(ctx) {
     ctx.rect(bounds.left, bounds.top, bounds.width, bounds.height);
     return;
   }
+  const footprint = isometricGridFootprint();
+  ctx.moveTo(footprint.top.x, footprint.top.y);
+  ctx.lineTo(footprint.right.x, footprint.right.y);
+  ctx.lineTo(footprint.bottom.x, footprint.bottom.y);
+  ctx.lineTo(footprint.left.x, footprint.left.y);
+  ctx.closePath();
+}
+
+function isometricGridFootprint() {
   const halfW = state.tileWidth / 2;
   const halfH = state.tileHeight / 2;
   const top = cellCenter(0, 0);
   const right = cellCenter(state.cols - 1, 0);
   const bottom = cellCenter(state.cols - 1, state.rows - 1);
   const left = cellCenter(0, state.rows - 1);
-  ctx.moveTo(top.x, top.y - halfH);
-  ctx.lineTo(right.x + halfW, right.y);
-  ctx.lineTo(bottom.x, bottom.y + halfH);
-  ctx.lineTo(left.x - halfW, left.y);
-  ctx.closePath();
+  return {
+    top: { x: top.x, y: top.y - halfH },
+    right: { x: right.x + halfW, y: right.y },
+    bottom: { x: bottom.x, y: bottom.y + halfH },
+    left: { x: left.x - halfW, y: left.y }
+  };
 }
 
 function drawProjectGrid(ctx) {
@@ -710,7 +742,8 @@ function deserializeTransitionRecipe(recipe) {
           y: Math.min(1, Math.max(0, point.y))
         }))
     : [];
-  if (points.length < 2) return null;
+  const cutLines = normalizeCutLines(recipe.cutLines, points);
+  if (points.length < 2 && cutLines.length === 0) return null;
   return {
     version: 1,
     tileAId: typeof recipe.tileAId === "string" ? recipe.tileAId : "transparent",
@@ -722,7 +755,10 @@ function deserializeTransitionRecipe(recipe) {
     decorationOpacity: clampNumber(recipe.decorationOpacity, 0, 100, 45),
     decorationBlend: supportedDecorationBlend(recipe.decorationBlend),
     side: recipe.side === "negative" ? "negative" : "positive",
-    points,
+    points: cutLines[0]?.points || points,
+    cutLines,
+    activeLineIndex: clampNumber(recipe.activeLineIndex, 0, Math.max(0, cutLines.length - 1), 0),
+    betweenMode: recipe.betweenMode === "include" ? "include" : "exclude",
     vertexCount: clampNumber(recipe.vertexCount, 2, 24, Math.min(24, Math.max(2, points.length || 5))),
     gridDivisions: clampNumber(recipe.gridDivisions, 2, 32, 8),
     snapToGrid: recipe.snapToGrid === true,
@@ -791,9 +827,11 @@ function syncCreateControlsFromState() {
   els.createTileC.value = state.create.tileCId;
   els.createDecorationOpacity.value = state.create.decorationOpacity;
   els.createDecorationBlend.value = state.create.decorationBlend;
+  els.createBetweenMode.value = state.create.betweenMode === "include" ? "include" : "exclude";
   els.createFeather.value = state.create.feather;
   els.createSplatter.value = state.create.splatter;
   els.createNoise.value = state.create.noise;
+  populateLineSelect(els.createLineSelect, state.create);
   els.createVertexCount.value = state.create.vertexCount;
   els.createGridDivisions.value = state.create.gridDivisions;
   els.createLineMode.value = state.create.lineMode;
@@ -803,6 +841,7 @@ function syncCreateControlsFromState() {
   els.createSideLower.classList.toggle("is-active", state.create.side === "positive");
   els.addCreatedTile.disabled = !state.create.tileBId;
   els.loadCreatedTile.disabled = !selectedTile()?.transition;
+  els.deleteCreateLine.disabled = getEditorLines(state.create).length <= 1;
 }
 
 function createOutputSize() {
@@ -823,13 +862,12 @@ function defaultCreateLine(width, height) {
 }
 
 function createLinePixels(width, height) {
-  const points = state.create.points.length >= 2
-    ? state.create.points.map((point) => ({ x: point.x * width, y: point.y * height }))
-    : defaultCreateLine(width, height);
-  return points.map((point) => ({
-    x: Math.min(width, Math.max(0, point.x)),
-    y: Math.min(height, Math.max(0, point.y))
-  }));
+  return normalizedLinePixels(activeEditorLine(state.create), width, height, defaultCreateLine);
+}
+
+function allCreateLinePixels(width, height) {
+  syncEditorLegacyPoints(state.create);
+  return state.create.cutLines.map((line) => normalizedLinePixels(line, width, height, defaultCreateLine));
 }
 
 function activeCreateLinePixels(width, height) {
@@ -838,7 +876,7 @@ function activeCreateLinePixels(width, height) {
 }
 
 function storedCreateLinePixels(width, height) {
-  return state.create.points.map((point) => ({
+  return activeEditorLine(state.create).points.map((point) => ({
     x: Math.min(width, Math.max(0, point.x * width)),
     y: Math.min(height, Math.max(0, point.y * height))
   }));
@@ -849,6 +887,76 @@ function normalizeCreatePoints(points, width, height) {
     x: Math.min(1, Math.max(0, point.x / width)),
     y: Math.min(1, Math.max(0, point.y / height))
   }));
+}
+
+function normalizeCutLinePoints(points) {
+  return Array.isArray(points)
+    ? points
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map((point) => ({
+          x: Math.min(1, Math.max(0, point.x)),
+          y: Math.min(1, Math.max(0, point.y))
+        }))
+    : [];
+}
+
+function normalizeCutLines(value, fallbackPoints = []) {
+  const lines = Array.isArray(value)
+    ? value.map((line) => normalizeCutLinePoints(line?.points || line)).filter((points) => points.length > 0)
+    : [];
+  const fallback = normalizeCutLinePoints(fallbackPoints);
+  if (lines.length === 0 && fallback.length > 0) return [{ points: fallback }];
+  return lines.map((points) => ({ points }));
+}
+
+function getEditorLines(editor) {
+  const lines = normalizeCutLines(editor.cutLines, editor.points);
+  if (lines.length === 0) return [{ points: [] }];
+  return lines;
+}
+
+function syncEditorLegacyPoints(editor) {
+  const lines = getEditorLines(editor);
+  const index = Math.min(Math.max(0, editor.activeLineIndex || 0), lines.length - 1);
+  editor.cutLines = lines;
+  editor.activeLineIndex = index;
+  editor.points = lines[index]?.points || [];
+}
+
+function activeEditorLine(editor) {
+  syncEditorLegacyPoints(editor);
+  return editor.cutLines[editor.activeLineIndex];
+}
+
+function setActiveEditorLinePoints(editor, points) {
+  const line = activeEditorLine(editor);
+  line.points = points;
+  editor.points = points;
+}
+
+function normalizedLinePixels(line, width, height, fallbackFactory) {
+  const points = line?.points?.length >= 2
+    ? line.points.map((point) => ({ x: point.x * width, y: point.y * height }))
+    : fallbackFactory(width, height);
+  return points.map((point) => ({
+    x: Math.min(width, Math.max(0, point.x)),
+    y: Math.min(height, Math.max(0, point.y))
+  }));
+}
+
+function populateLineSelect(select, editor) {
+  const previousValue = String(editor.activeLineIndex || 0);
+  syncEditorLegacyPoints(editor);
+  select.replaceChildren();
+  editor.cutLines.forEach((line, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = `Line ${index + 1}`;
+    select.append(option);
+  });
+  select.value = [...select.options].some((option) => option.value === previousValue)
+    ? previousValue
+    : String(editor.activeLineIndex || 0);
 }
 
 function snapCreatePoint(point, width, height) {
@@ -1005,7 +1113,7 @@ function drawCreateVertices(points) {
   createCtx.restore();
 }
 
-function createMaskCanvas(width, height, points, side, feather) {
+function createMaskCanvas(width, height, points, side, feather, lineMode = state.create.lineMode) {
   const mask = document.createElement("canvas");
   mask.width = width;
   mask.height = height;
@@ -1015,7 +1123,7 @@ function createMaskCanvas(width, height, points, side, feather) {
   const margin = Math.max(width, height) * 3;
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  traceCreatePath(ctx, cutPoints);
+  traceCreatePath(ctx, cutPoints, lineMode);
   if (orientation === "horizontal") {
     if (side === "positive") {
       ctx.lineTo(width + margin, height + margin);
@@ -1048,6 +1156,74 @@ function createMaskCanvas(width, height, points, side, feather) {
   return mask;
 }
 
+function lineValueAt(points, target, orientation) {
+  const coordinate = orientation === "horizontal" ? "x" : "y";
+  const valueCoordinate = orientation === "horizontal" ? "y" : "x";
+  const sorted = [...points].sort((a, b) => a[coordinate] - b[coordinate]);
+  if (target <= sorted[0][coordinate]) return sorted[0][valueCoordinate];
+  if (target >= sorted[sorted.length - 1][coordinate]) return sorted[sorted.length - 1][valueCoordinate];
+  for (let index = 1; index < sorted.length; index += 1) {
+    const previous = sorted[index - 1];
+    const current = sorted[index];
+    if (target < previous[coordinate] || target > current[coordinate]) continue;
+    const span = current[coordinate] - previous[coordinate];
+    const t = span === 0 ? 0 : (target - previous[coordinate]) / span;
+    return previous[valueCoordinate] + (current[valueCoordinate] - previous[valueCoordinate]) * t;
+  }
+  return sorted[sorted.length - 1][valueCoordinate];
+}
+
+function createBetweenLinesMask(width, height, lineA, lineB, lineMode) {
+  const mask = document.createElement("canvas");
+  mask.width = width;
+  mask.height = height;
+  const ctx = mask.getContext("2d");
+  const pointsA = simplifyStrokePoints(lineA);
+  const pointsB = simplifyStrokePoints(lineB);
+  if (pointsA.length < 2 || pointsB.length < 2) return mask;
+  const orientation = lineOrientation(pointsA);
+  const imageData = ctx.createImageData(width, height);
+  const data = imageData.data;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const target = orientation === "horizontal" ? x : y;
+      const a = lineValueAt(pointsA, target, orientation);
+      const b = lineValueAt(pointsB, target, orientation);
+      const value = orientation === "horizontal" ? y : x;
+      if (value < Math.min(a, b) || value > Math.max(a, b)) continue;
+      data[(y * width + x) * 4 + 3] = 255;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return mask;
+}
+
+function combineLineMasks(width, height, lineSets, side, feather, lineMode, betweenMode) {
+  const output = document.createElement("canvas");
+  output.width = width;
+  output.height = height;
+  const outputCtx = output.getContext("2d");
+  if (lineSets.length === 0) return output;
+
+  for (const line of lineSets) {
+    const mask = createMaskCanvas(width, height, line, side, feather, lineMode);
+    outputCtx.drawImage(mask, 0, 0);
+  }
+
+  if (lineSets.length >= 2) {
+    const between = createBetweenLinesMask(width, height, lineSets[0], lineSets[1], lineMode);
+    if (betweenMode === "include") {
+      outputCtx.clearRect(0, 0, width, height);
+      outputCtx.drawImage(between, 0, 0);
+    } else {
+      outputCtx.globalCompositeOperation = "destination-out";
+      outputCtx.drawImage(between, 0, 0);
+      outputCtx.globalCompositeOperation = "source-over";
+    }
+  }
+  return output;
+}
+
 function distanceToSegment(px, py, ax, ay, bx, by) {
   const dx = bx - ax;
   const dy = by - ay;
@@ -1072,13 +1248,15 @@ function seededNoise(x, y, seed) {
   return value - Math.floor(value);
 }
 
-function applyMaskEffects(mask, points, splatter, noise) {
+function applyMaskEffects(mask, lineSets, splatter, noise) {
   if (splatter === 0 && noise === 0) return mask;
+  const lines = Array.isArray(lineSets?.[0]) ? lineSets : [lineSets];
+  const seedPoints = lines.flat();
   const ctx = mask.getContext("2d");
   const imageData = ctx.getImageData(0, 0, mask.width, mask.height);
   const pixels = imageData.data;
   const splatterRadius = Math.max(1, Math.max(mask.width, mask.height) * 0.18 * (splatter / 100));
-  const seed = points.reduce((sum, point) => sum + point.x * 0.13 + point.y * 0.17, 11);
+  const seed = seedPoints.reduce((sum, point) => sum + point.x * 0.13 + point.y * 0.17, 11);
 
   for (let y = 0; y < mask.height; y += 1) {
     for (let x = 0; x < mask.width; x += 1) {
@@ -1087,7 +1265,7 @@ function applyMaskEffects(mask, points, splatter, noise) {
       if (noise > 0 && alpha > 0 && alpha < 255) {
         alpha += (seededNoise(x, y, seed) - 0.5) * 255 * (noise / 100);
       }
-      if (splatter > 0 && distanceToLine(x, y, points) <= splatterRadius) {
+      if (splatter > 0 && lines.some((points) => distanceToLine(x, y, points) <= splatterRadius)) {
         const chance = splatter / 100 * 0.34;
         if (seededNoise(x, y, seed + 19) < chance) {
           alpha = seededNoise(x, y, seed + 29) < 0.5 ? 0 : 255;
@@ -1114,10 +1292,10 @@ function buildTransitionCanvas() {
   drawTileToCanvas(outputCtx, tileA, width, height);
 
   if (!tileB) return output;
-  const points = activeCreateLinePixels(width, height);
+  const lineSets = allCreateLinePixels(width, height).map((points) => resamplePath(points, state.create.vertexCount));
   const mask = applyMaskEffects(
-    createMaskCanvas(width, height, points, state.create.side, state.create.feather),
-    points,
+    combineLineMasks(width, height, lineSets, state.create.side, state.create.feather, state.create.lineMode, state.create.betweenMode),
+    lineSets,
     state.create.splatter,
     state.create.noise
   );
@@ -1147,16 +1325,19 @@ function drawCreatePreview() {
   createCtx.clearRect(0, 0, width, height);
   createCtx.drawImage(buildTransitionCanvas(), 0, 0);
 
+  const lineSets = allCreateLinePixels(width, height).map((points) => resamplePath(points, state.create.vertexCount));
   const points = activeCreateLinePixels(width, height);
   drawCreateSubgrid(width, height);
-  createCtx.save();
-  createCtx.strokeStyle = cssVar("--accent-strong") || "#20766d";
-  createCtx.lineWidth = Math.max(2, Math.ceil(Math.max(width, height) / 96));
-  createCtx.setLineDash([8, 5]);
-  createCtx.beginPath();
-  traceCreatePath(createCtx, simplifyStrokePoints(points));
-  createCtx.stroke();
-  createCtx.restore();
+  lineSets.forEach((line, index) => {
+    createCtx.save();
+    createCtx.strokeStyle = index === state.create.activeLineIndex ? cssVar("--accent-strong") || "#20766d" : "rgba(32, 118, 109, 0.45)";
+    createCtx.lineWidth = index === state.create.activeLineIndex ? Math.max(2, Math.ceil(Math.max(width, height) / 96)) : 1;
+    createCtx.setLineDash([8, 5]);
+    createCtx.beginPath();
+    traceCreatePath(createCtx, simplifyStrokePoints(line), state.create.lineMode);
+    createCtx.stroke();
+    createCtx.restore();
+  });
   drawCreateVertices(points);
 
   const tileA = state.create.tileAId === "transparent"
@@ -1176,12 +1357,14 @@ function readCreateEffectControls() {
   state.create.tileCId = els.createTileC.value || "none";
   state.create.decorationOpacity = clampNumber(els.createDecorationOpacity.value, 0, 100, state.create.decorationOpacity);
   state.create.decorationBlend = supportedDecorationBlend(els.createDecorationBlend.value);
+  state.create.betweenMode = els.createBetweenMode.value === "include" ? "include" : "exclude";
   state.create.feather = clampNumber(els.createFeather.value, 0, 64, state.create.feather);
   state.create.splatter = clampNumber(els.createSplatter.value, 0, 100, state.create.splatter);
   state.create.noise = clampNumber(els.createNoise.value, 0, 100, state.create.noise);
   state.create.gridDivisions = clampNumber(els.createGridDivisions.value, 2, 32, state.create.gridDivisions);
   state.create.lineMode = els.createLineMode.value === "straight" ? "straight" : "smooth";
   state.create.snapToGrid = els.createSnapToGrid.checked;
+  state.create.vertexMode = els.createVertexMode.checked;
   drawCreatePreview();
 }
 
@@ -1191,6 +1374,9 @@ function transitionRecipeForCurrentTile() {
   const tileC = state.create.tileCId === "none" ? null : state.tiles.find((tile) => tile.id === state.create.tileCId);
   const { width, height } = createOutputSize();
   const points = normalizeCreatePoints(activeCreateLinePixels(width, height), width, height);
+  const cutLines = allCreateLinePixels(width, height).map((line) => ({
+    points: normalizeCreatePoints(resamplePath(line, state.create.vertexCount), width, height)
+  }));
   return {
     version: 1,
     tileAId: state.create.tileAId,
@@ -1203,6 +1389,9 @@ function transitionRecipeForCurrentTile() {
     decorationBlend: supportedDecorationBlend(state.create.decorationBlend),
     side: state.create.side,
     points,
+    cutLines,
+    activeLineIndex: state.create.activeLineIndex,
+    betweenMode: state.create.betweenMode,
     vertexCount: state.create.vertexCount,
     gridDivisions: state.create.gridDivisions,
     snapToGrid: state.create.snapToGrid,
@@ -1238,8 +1427,41 @@ function setCreateSide(side) {
   drawCreatePreview();
 }
 
+function setCreateLine(index) {
+  syncEditorLegacyPoints(state.create);
+  state.create.activeLineIndex = Math.min(Math.max(0, index), state.create.cutLines.length - 1);
+  state.create.activeVertexIndex = -1;
+  state.create.points = activeEditorLine(state.create).points;
+  drawCreatePreview();
+}
+
+function addCreateLine() {
+  const { width, height } = createOutputSize();
+  syncEditorLegacyPoints(state.create);
+  const offset = Math.min(0.18, 0.05 * state.create.cutLines.length);
+  const points = normalizeCreatePoints(defaultCreateLine(width, height).map((point) => ({
+    x: point.x,
+    y: Math.min(height, Math.max(0, point.y + height * offset))
+  })), width, height);
+  state.create.cutLines.push({ points });
+  state.create.activeLineIndex = state.create.cutLines.length - 1;
+  state.create.points = points;
+  drawCreatePreview();
+}
+
+function deleteCreateLine() {
+  syncEditorLegacyPoints(state.create);
+  if (state.create.cutLines.length <= 1) return;
+  state.create.cutLines.splice(state.create.activeLineIndex, 1);
+  state.create.activeLineIndex = Math.min(state.create.activeLineIndex, state.create.cutLines.length - 1);
+  state.create.points = activeEditorLine(state.create).points;
+  drawCreatePreview();
+}
+
 function resetCreateLine() {
-  state.create.points = [];
+  const line = activeEditorLine(state.create);
+  line.points = [];
+  state.create.points = line.points;
   state.create.activeVertexIndex = -1;
   drawCreatePreview();
   setStatus("Transition cut line reset.");
@@ -1264,6 +1486,9 @@ function loadSelectedTransitionRecipe() {
     decorationBlend: restored.decorationBlend,
     side: restored.side,
     points: restored.points,
+    cutLines: restored.cutLines,
+    activeLineIndex: restored.activeLineIndex,
+    betweenMode: restored.betweenMode,
     vertexCount: restored.vertexCount,
     gridDivisions: restored.gridDivisions,
     snapToGrid: restored.snapToGrid,
@@ -1283,12 +1508,17 @@ function defaultCullState() {
     enabled: false,
     side: "positive",
     points: [],
+    cutLines: [],
+    activeLineIndex: 0,
+    betweenMode: "exclude",
     vertexCount: 5,
     gridDivisions: 8,
     snapToGrid: false,
     vertexMode: false,
     lineMode: "smooth",
     feather: 0,
+    splatter: 0,
+    noise: 0,
     activeVertexIndex: -1,
     drawing: false,
     draggingVertex: false
@@ -1305,16 +1535,22 @@ function normalizeCull(cull) {
           y: Math.min(1, Math.max(0, point.y))
         }))
     : [];
+  const cutLines = normalizeCutLines(cull.cutLines, points);
   return {
     enabled: cull.enabled === true,
     side: cull.side === "negative" ? "negative" : "positive",
-    points,
+    points: cutLines[0]?.points || points,
+    cutLines,
+    activeLineIndex: clampNumber(cull.activeLineIndex, 0, Math.max(0, cutLines.length - 1), 0),
+    betweenMode: cull.betweenMode === "include" ? "include" : "exclude",
     vertexCount: clampNumber(cull.vertexCount, 2, 24, Math.min(24, Math.max(2, points.length || 5))),
     gridDivisions: clampNumber(cull.gridDivisions, 2, 32, 8),
     snapToGrid: cull.snapToGrid === true,
     vertexMode: cull.vertexMode === true,
     lineMode: cull.lineMode === "straight" ? "straight" : "smooth",
     feather: clampNumber(cull.feather, 0, 96, 0),
+    splatter: clampNumber(cull.splatter, 0, 100, 0),
+    noise: clampNumber(cull.noise, 0, 100, 0),
     activeVertexIndex: -1,
     drawing: false,
     draggingVertex: false
@@ -1336,13 +1572,12 @@ function defaultCullLine(width, height) {
 }
 
 function cullLinePixels(cull, width, height) {
-  const points = cull.points.length >= 2
-    ? cull.points.map((point) => ({ x: point.x * width, y: point.y * height }))
-    : defaultCullLine(width, height);
-  return points.map((point) => ({
-    x: Math.min(width, Math.max(0, point.x)),
-    y: Math.min(height, Math.max(0, point.y))
-  }));
+  return normalizedLinePixels(activeEditorLine(cull), width, height, defaultCullLine);
+}
+
+function allCullLinePixels(cull, width, height) {
+  syncEditorLegacyPoints(cull);
+  return cull.cutLines.map((line) => normalizedLinePixels(line, width, height, defaultCullLine));
 }
 
 function activeCullLinePixels(cull, width, height) {
@@ -1350,7 +1585,7 @@ function activeCullLinePixels(cull, width, height) {
 }
 
 function storedCullLinePixels(cull, width, height) {
-  return cull.points.map((point) => ({
+  return activeEditorLine(cull).points.map((point) => ({
     x: Math.min(width, Math.max(0, point.x * width)),
     y: Math.min(height, Math.max(0, point.y * height))
   }));
@@ -1359,6 +1594,7 @@ function storedCullLinePixels(cull, width, height) {
 function snapCullPoint(point, cull, width, height) {
   if (!cull.snapToGrid) return point;
   const divisions = Math.max(2, cull.gridDivisions);
+  if (state.tileMode === "isometric") return snapIsometricCullPoint(point, divisions);
   const bounds = tileGridBounds();
   const cellW = bounds.width / divisions;
   const cellH = bounds.height / divisions;
@@ -1369,7 +1605,42 @@ function snapCullPoint(point, cull, width, height) {
 }
 
 function setCullPointsFromPixels(cull, points, width = els.cullCanvas.width, height = els.cullCanvas.height) {
-  cull.points = normalizeCreatePoints(points, width, height);
+  setActiveEditorLinePoints(cull, normalizeCreatePoints(points, width, height));
+}
+
+function interpolatePoint(a, b, t) {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t
+  };
+}
+
+function snapIsometricCullPoint(point, divisions) {
+  const footprint = isometricGridFootprint();
+  const origin = footprint.top;
+  const axisU = {
+    x: footprint.right.x - footprint.top.x,
+    y: footprint.right.y - footprint.top.y
+  };
+  const axisV = {
+    x: footprint.left.x - footprint.top.x,
+    y: footprint.left.y - footprint.top.y
+  };
+  const determinant = axisU.x * axisV.y - axisU.y * axisV.x;
+  if (Math.abs(determinant) < 0.0001) return point;
+
+  const relative = {
+    x: point.x - origin.x,
+    y: point.y - origin.y
+  };
+  const u = (relative.x * axisV.y - relative.y * axisV.x) / determinant;
+  const v = (axisU.x * relative.y - axisU.y * relative.x) / determinant;
+  const snappedU = Math.min(1, Math.max(0, Math.round(u * divisions) / divisions));
+  const snappedV = Math.min(1, Math.max(0, Math.round(v * divisions) / divisions));
+  return {
+    x: origin.x + axisU.x * snappedU + axisV.x * snappedV,
+    y: origin.y + axisU.y * snappedU + axisV.y * snappedV
+  };
 }
 
 function syncCullControlsFromState() {
@@ -1389,12 +1660,17 @@ function syncCullControlsFromState() {
   const cull = layer.cull;
   els.cullLayerSelect.value = layer.id;
   els.cullEnabled.checked = cull.enabled;
+  els.cullBetweenMode.value = cull.betweenMode === "include" ? "include" : "exclude";
+  populateLineSelect(els.cullLineSelect, cull);
   els.cullVertexCount.value = cull.vertexCount;
   els.cullGridDivisions.value = cull.gridDivisions;
   els.cullLineMode.value = cull.lineMode;
   els.cullSnapToGrid.checked = cull.snapToGrid;
   els.cullVertexMode.checked = cull.vertexMode;
   els.cullFeather.value = cull.feather;
+  els.cullSplatter.value = cull.splatter;
+  els.cullNoise.value = cull.noise;
+  els.deleteCullLine.disabled = getEditorLines(cull).length <= 1;
   els.cullSideUpper.classList.toggle("is-active", cull.side === "negative");
   els.cullSideLower.classList.toggle("is-active", cull.side === "positive");
 }
@@ -1408,6 +1684,27 @@ function drawCullSubgrid(width, height, cull) {
   cullCtx.clip();
   cullCtx.strokeStyle = cull.snapToGrid ? "rgba(32, 118, 109, 0.42)" : "rgba(32, 118, 109, 0.18)";
   cullCtx.lineWidth = 1;
+  if (state.tileMode === "isometric") {
+    const footprint = isometricGridFootprint();
+    for (let index = 1; index < divisions; index += 1) {
+      const t = index / divisions;
+      const leftEdgePoint = interpolatePoint(footprint.top, footprint.left, t);
+      const rightEdgePoint = interpolatePoint(footprint.right, footprint.bottom, t);
+      cullCtx.beginPath();
+      cullCtx.moveTo(leftEdgePoint.x, leftEdgePoint.y);
+      cullCtx.lineTo(rightEdgePoint.x, rightEdgePoint.y);
+      cullCtx.stroke();
+
+      const topEdgePoint = interpolatePoint(footprint.top, footprint.right, t);
+      const bottomEdgePoint = interpolatePoint(footprint.left, footprint.bottom, t);
+      cullCtx.beginPath();
+      cullCtx.moveTo(topEdgePoint.x, topEdgePoint.y);
+      cullCtx.lineTo(bottomEdgePoint.x, bottomEdgePoint.y);
+      cullCtx.stroke();
+    }
+    cullCtx.restore();
+    return;
+  }
   for (let index = 1; index < divisions; index += 1) {
     const x = bounds.left + bounds.width * index / divisions;
     const y = bounds.top + bounds.height * index / divisions;
@@ -1461,61 +1758,33 @@ function drawCullPreview() {
   cullCtx.fillRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
   drawProjectGrid(cullCtx);
   renderSingleLayerToCanvas(layer, cullCtx);
+  const lineSets = allCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height)
+    .map((points) => resamplePath(points, cull.vertexCount));
   const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
   drawCullSubgrid(els.cullCanvas.width, els.cullCanvas.height, cull);
-  cullCtx.save();
-  cullCtx.strokeStyle = cssVar("--accent-strong") || "#20766d";
-  cullCtx.lineWidth = Math.max(2, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 360));
-  cullCtx.setLineDash([10, 6]);
-  cullCtx.beginPath();
-  traceCreatePath(cullCtx, simplifyStrokePoints(points), cull.lineMode);
-  cullCtx.stroke();
-  cullCtx.restore();
+  lineSets.forEach((line, index) => {
+    cullCtx.save();
+    cullCtx.strokeStyle = index === cull.activeLineIndex ? cssVar("--accent-strong") || "#20766d" : "rgba(32, 118, 109, 0.45)";
+    cullCtx.lineWidth = index === cull.activeLineIndex ? Math.max(2, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 360)) : 1;
+    cullCtx.setLineDash([10, 6]);
+    cullCtx.beginPath();
+    traceCreatePath(cullCtx, simplifyStrokePoints(line), cull.lineMode);
+    cullCtx.stroke();
+    cullCtx.restore();
+  });
   drawCullVertices(points, cull);
   const placementCount = layer.placements.size;
   els.cullPreviewStatus.textContent = `${layer.name}: ${placementCount} placed tile${placementCount === 1 ? "" : "s"}. ${cull.enabled ? "Cull enabled for exports." : "Cull disabled for exports."}`;
 }
 
 function createCullMaskCanvas(width, height, cull) {
-  const points = activeCullLinePixels(cull, width, height);
-  const mask = document.createElement("canvas");
-  mask.width = width;
-  mask.height = height;
-  const ctx = mask.getContext("2d");
-  const cutPoints = extendedCutPoints(width, height, simplifyStrokePoints(points));
-  const orientation = lineOrientation(cutPoints);
-  const margin = Math.max(width, height) * 3;
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  traceCreatePath(ctx, cutPoints, cull.lineMode);
-  if (orientation === "horizontal") {
-    if (cull.side === "positive") {
-      ctx.lineTo(width + margin, height + margin);
-      ctx.lineTo(-margin, height + margin);
-    } else {
-      ctx.lineTo(width + margin, -margin);
-      ctx.lineTo(-margin, -margin);
-    }
-  } else if (cull.side === "positive") {
-    ctx.lineTo(width + margin, height + margin);
-    ctx.lineTo(width + margin, -margin);
-  } else {
-    ctx.lineTo(-margin, height + margin);
-    ctx.lineTo(-margin, -margin);
-  }
-  ctx.closePath();
-  ctx.fill();
-  if (cull.feather > 0) {
-    const blurred = document.createElement("canvas");
-    blurred.width = width;
-    blurred.height = height;
-    const blurCtx = blurred.getContext("2d");
-    blurCtx.filter = `blur(${cull.feather}px)`;
-    blurCtx.drawImage(mask, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(blurred, 0, 0);
-  }
-  return mask;
+  const lineSets = allCullLinePixels(cull, width, height).map((points) => resamplePath(points, cull.vertexCount));
+  return applyMaskEffects(
+    combineLineMasks(width, height, lineSets, cull.side, cull.feather, cull.lineMode, cull.betweenMode),
+    lineSets,
+    cull.splatter,
+    cull.noise
+  );
 }
 
 function selectedTileLabel() {
@@ -1900,12 +2169,17 @@ function saveProject() {
         enabled: layer.cull.enabled,
         side: layer.cull.side,
         points: layer.cull.points,
+        cutLines: layer.cull.cutLines,
+        activeLineIndex: layer.cull.activeLineIndex,
+        betweenMode: layer.cull.betweenMode,
         vertexCount: layer.cull.vertexCount,
         gridDivisions: layer.cull.gridDivisions,
         snapToGrid: layer.cull.snapToGrid,
         vertexMode: layer.cull.vertexMode,
         lineMode: layer.cull.lineMode,
-        feather: layer.cull.feather
+        feather: layer.cull.feather,
+        splatter: layer.cull.splatter,
+        noise: layer.cull.noise
       } : null
     })),
     selectedTileId: state.selectedTileId,
@@ -1914,6 +2188,90 @@ function saveProject() {
     viewerScale: state.viewerScale
   });
   setStatus(`Saved project with ${state.tiles.length} palette tile${state.tiles.length === 1 ? "" : "s"}, ${state.layers.length} layer${state.layers.length === 1 ? "" : "s"}, and ${placedTileCount()} placement${placedTileCount() === 1 ? "" : "s"}.`);
+}
+
+function linePatternFromEditor(editor, target) {
+  syncEditorLegacyPoints(editor);
+  return {
+    format: "tile-builder-line-pattern",
+    version: 1,
+    target,
+    side: editor.side,
+    cutLines: editor.cutLines.map((line) => ({ points: normalizeCutLinePoints(line.points) })),
+    activeLineIndex: editor.activeLineIndex,
+    betweenMode: editor.betweenMode === "include" ? "include" : "exclude",
+    vertexCount: editor.vertexCount,
+    gridDivisions: editor.gridDivisions,
+    snapToGrid: editor.snapToGrid === true,
+    vertexMode: editor.vertexMode === true,
+    lineMode: editor.lineMode === "straight" ? "straight" : "smooth",
+    feather: editor.feather,
+    splatter: editor.splatter || 0,
+    noise: editor.noise || 0
+  };
+}
+
+function normalizeLinePattern(pattern, expectedTarget) {
+  if (!pattern || pattern.format !== "tile-builder-line-pattern" || pattern.version !== 1) {
+    throw new Error("Unsupported line pattern.");
+  }
+  if (pattern.target !== expectedTarget) {
+    throw new Error("Line pattern target does not match this tab.");
+  }
+  const cutLines = normalizeCutLines(pattern.cutLines, pattern.points);
+  if (cutLines.length === 0) throw new Error("Line pattern does not contain cut lines.");
+  return {
+    side: pattern.side === "negative" ? "negative" : "positive",
+    cutLines,
+    points: cutLines[Math.min(Math.max(0, pattern.activeLineIndex || 0), cutLines.length - 1)].points,
+    activeLineIndex: clampNumber(pattern.activeLineIndex, 0, cutLines.length - 1, 0),
+    betweenMode: pattern.betweenMode === "include" ? "include" : "exclude",
+    vertexCount: clampNumber(pattern.vertexCount, 2, 24, 5),
+    gridDivisions: clampNumber(pattern.gridDivisions, 2, 32, 8),
+    snapToGrid: pattern.snapToGrid === true,
+    vertexMode: pattern.vertexMode === true,
+    lineMode: pattern.lineMode === "straight" ? "straight" : "smooth",
+    feather: clampNumber(pattern.feather, 0, expectedTarget === "cull" ? 96 : 64, expectedTarget === "cull" ? 0 : 6),
+    splatter: clampNumber(pattern.splatter, 0, 100, expectedTarget === "cull" ? 0 : 18),
+    noise: clampNumber(pattern.noise, 0, 100, expectedTarget === "cull" ? 0 : 8)
+  };
+}
+
+function saveCreatePattern() {
+  downloadJson("create-line-pattern.json", linePatternFromEditor(state.create, "create"));
+  setStatus("Saved Create line pattern.");
+}
+
+function saveCullPattern() {
+  downloadJson("cull-line-pattern.json", linePatternFromEditor(cullLayer().cull, "cull"));
+  setStatus("Saved Cull line pattern.");
+}
+
+async function loadCreatePattern(file) {
+  if (!file) return;
+  try {
+    const pattern = normalizeLinePattern(JSON.parse(await file.text()), "create");
+    Object.assign(state.create, pattern, { activeVertexIndex: -1, draggingVertex: false, drawing: false });
+    drawCreatePreview();
+    setStatus(`Loaded Create line pattern from ${file.name}.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Could not load Create line pattern from ${file.name}.`);
+  }
+}
+
+async function loadCullPattern(file) {
+  if (!file) return;
+  try {
+    const pattern = normalizeLinePattern(JSON.parse(await file.text()), "cull");
+    const cull = cullLayer().cull;
+    Object.assign(cull, pattern, { enabled: true, activeVertexIndex: -1, draggingVertex: false, drawing: false });
+    drawCullPreview();
+    setStatus(`Loaded Cull line pattern from ${file.name}.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Could not load Cull line pattern from ${file.name}.`);
+  }
 }
 
 function imageFromDataUrl(url) {
@@ -3016,7 +3374,7 @@ function createPointer(event) {
 }
 
 function setCreatePointsFromPixels(points, width = els.createCanvas.width, height = els.createCanvas.height) {
-  state.create.points = normalizeCreatePoints(points, width, height);
+  setActiveEditorLinePoints(state.create, normalizeCreatePoints(points, width, height));
 }
 
 function nearestCreateVertex(point) {
@@ -3198,6 +3556,40 @@ function setCullLayer(layerId) {
   drawCullPreview();
 }
 
+function setCullLine(index) {
+  const cull = cullLayer().cull;
+  syncEditorLegacyPoints(cull);
+  cull.activeLineIndex = Math.min(Math.max(0, index), cull.cutLines.length - 1);
+  cull.activeVertexIndex = -1;
+  cull.points = activeEditorLine(cull).points;
+  drawCullPreview();
+}
+
+function addCullLine() {
+  const cull = cullLayer().cull;
+  syncEditorLegacyPoints(cull);
+  const offset = Math.min(0.18, 0.05 * cull.cutLines.length);
+  const points = normalizeCreatePoints(defaultCullLine(els.cullCanvas.width, els.cullCanvas.height).map((point) => ({
+    x: point.x,
+    y: Math.min(els.cullCanvas.height, Math.max(0, point.y + els.cullCanvas.height * offset))
+  })), els.cullCanvas.width, els.cullCanvas.height);
+  cull.cutLines.push({ points });
+  cull.activeLineIndex = cull.cutLines.length - 1;
+  cull.points = points;
+  cull.enabled = true;
+  drawCullPreview();
+}
+
+function deleteCullLine() {
+  const cull = cullLayer().cull;
+  syncEditorLegacyPoints(cull);
+  if (cull.cutLines.length <= 1) return;
+  cull.cutLines.splice(cull.activeLineIndex, 1);
+  cull.activeLineIndex = Math.min(cull.activeLineIndex, cull.cutLines.length - 1);
+  cull.points = activeEditorLine(cull).points;
+  drawCullPreview();
+}
+
 function setCullSide(side) {
   cullLayer().cull.side = side === "negative" ? "negative" : "positive";
   drawCullPreview();
@@ -3206,13 +3598,18 @@ function setCullSide(side) {
 function updateCullControls() {
   const cull = cullLayer().cull;
   cull.enabled = els.cullEnabled.checked;
+  cull.betweenMode = els.cullBetweenMode.value === "include" ? "include" : "exclude";
   cull.gridDivisions = clampNumber(els.cullGridDivisions.value, 2, 32, cull.gridDivisions);
   cull.lineMode = els.cullLineMode.value === "straight" ? "straight" : "smooth";
   cull.snapToGrid = els.cullSnapToGrid.checked;
   cull.vertexMode = els.cullVertexMode.checked;
   cull.feather = clampNumber(els.cullFeather.value, 0, 96, cull.feather);
+  cull.splatter = clampNumber(els.cullSplatter.value, 0, 100, cull.splatter);
+  cull.noise = clampNumber(els.cullNoise.value, 0, 100, cull.noise);
   els.cullGridDivisions.value = cull.gridDivisions;
   els.cullFeather.value = cull.feather;
+  els.cullSplatter.value = cull.splatter;
+  els.cullNoise.value = cull.noise;
   if (cull.snapToGrid && cull.points.length > 0) {
     const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height)
       .map((point) => snapCullPoint(point, cull, els.cullCanvas.width, els.cullCanvas.height));
@@ -3234,7 +3631,9 @@ function setCullVertexCount() {
 
 function clearCullLine() {
   const cull = cullLayer().cull;
-  cull.points = [];
+  const line = activeEditorLine(cull);
+  line.points = [];
+  cull.points = line.points;
   cull.enabled = false;
   cull.activeVertexIndex = -1;
   cull.drawing = false;
@@ -3306,9 +3705,11 @@ els.createTileB.addEventListener("change", readCreateEffectControls);
 els.createTileC.addEventListener("change", readCreateEffectControls);
 els.createDecorationOpacity.addEventListener("input", readCreateEffectControls);
 els.createDecorationBlend.addEventListener("change", readCreateEffectControls);
+els.createBetweenMode.addEventListener("change", readCreateEffectControls);
 els.createFeather.addEventListener("input", readCreateEffectControls);
 els.createSplatter.addEventListener("input", readCreateEffectControls);
 els.createNoise.addEventListener("input", readCreateEffectControls);
+els.createLineSelect.addEventListener("change", () => setCreateLine(Number.parseInt(els.createLineSelect.value, 10)));
 els.createVertexCount.addEventListener("input", setCreateVertexCount);
 els.createGridDivisions.addEventListener("input", updateCreatePathControls);
 els.createLineMode.addEventListener("change", updateCreatePathControls);
@@ -3316,19 +3717,37 @@ els.createSnapToGrid.addEventListener("change", updateCreatePathControls);
 els.createVertexMode.addEventListener("change", updateCreatePathControls);
 els.createSideUpper.addEventListener("click", () => setCreateSide("negative"));
 els.createSideLower.addEventListener("click", () => setCreateSide("positive"));
+els.addCreateLine.addEventListener("click", addCreateLine);
+els.deleteCreateLine.addEventListener("click", deleteCreateLine);
+els.saveCreatePattern.addEventListener("click", saveCreatePattern);
+els.createPatternFileInput.addEventListener("change", (event) => {
+  loadCreatePattern(event.target.files[0]);
+  event.target.value = "";
+});
 els.clearCreateLine.addEventListener("click", resetCreateLine);
 els.loadCreatedTile.addEventListener("click", loadSelectedTransitionRecipe);
 els.addCreatedTile.addEventListener("click", addCreatedTransitionTile);
 els.cullLayerSelect.addEventListener("change", () => setCullLayer(els.cullLayerSelect.value));
 els.cullEnabled.addEventListener("change", updateCullControls);
+els.cullBetweenMode.addEventListener("change", updateCullControls);
 els.cullSideUpper.addEventListener("click", () => setCullSide("negative"));
 els.cullSideLower.addEventListener("click", () => setCullSide("positive"));
+els.cullLineSelect.addEventListener("change", () => setCullLine(Number.parseInt(els.cullLineSelect.value, 10)));
 els.cullVertexCount.addEventListener("input", setCullVertexCount);
 els.cullGridDivisions.addEventListener("input", updateCullControls);
 els.cullLineMode.addEventListener("change", updateCullControls);
 els.cullSnapToGrid.addEventListener("change", updateCullControls);
 els.cullVertexMode.addEventListener("change", updateCullControls);
 els.cullFeather.addEventListener("input", updateCullControls);
+els.cullSplatter.addEventListener("input", updateCullControls);
+els.cullNoise.addEventListener("input", updateCullControls);
+els.addCullLine.addEventListener("click", addCullLine);
+els.deleteCullLine.addEventListener("click", deleteCullLine);
+els.saveCullPattern.addEventListener("click", saveCullPattern);
+els.cullPatternFileInput.addEventListener("change", (event) => {
+  loadCullPattern(event.target.files[0]);
+  event.target.value = "";
+});
 els.clearCullLine.addEventListener("click", clearCullLine);
 els.renameLayer.addEventListener("click", renameActiveLayer);
 els.layerName.addEventListener("keydown", (event) => {
@@ -3440,12 +3859,17 @@ window.__tileBuilderDebug = {
           enabled: layer.cull.enabled,
           side: layer.cull.side,
           points: layer.cull.points,
+          cutLines: layer.cull.cutLines,
+          activeLineIndex: layer.cull.activeLineIndex,
+          betweenMode: layer.cull.betweenMode,
           vertexCount: layer.cull.vertexCount,
           gridDivisions: layer.cull.gridDivisions,
           snapToGrid: layer.cull.snapToGrid,
           vertexMode: layer.cull.vertexMode,
           lineMode: layer.cull.lineMode,
-          feather: layer.cull.feather
+          feather: layer.cull.feather,
+          splatter: layer.cull.splatter,
+          noise: layer.cull.noise
         } : null
       })),
       pickedPlacement: state.pickedPlacement,
@@ -3460,6 +3884,9 @@ window.__tileBuilderDebug = {
         decorationBlend: state.create.decorationBlend,
         side: state.create.side,
         points: state.create.points,
+        cutLines: state.create.cutLines,
+        activeLineIndex: state.create.activeLineIndex,
+        betweenMode: state.create.betweenMode,
         vertexCount: state.create.vertexCount,
         gridDivisions: state.create.gridDivisions,
         snapToGrid: state.create.snapToGrid,

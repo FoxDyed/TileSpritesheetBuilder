@@ -218,6 +218,20 @@ async function clickExport(page, name) {
   await page.getByRole("button", { name }).click();
 }
 
+async function downloadJsonFromClick(page, action) {
+  const downloadPromise = page.waitForEvent("download");
+  await action();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return {
+    filename: download.suggestedFilename(),
+    buffer: Buffer.concat(chunks),
+    json: JSON.parse(Buffer.concat(chunks).toString("utf8"))
+  };
+}
+
 async function setProject(page, {
   cols = 4,
   rows = 3,
@@ -698,6 +712,99 @@ test("draws an editable cull path on a placed layer and applies it to layer expo
   expect(inspected.below[3]).toBe(255);
 });
 
+test("saves and loads reusable create and cull line patterns", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, { cols: 3, rows: 3, tileWidth: 64, tileHeight: 32, exportCols: 1 });
+  await addTile(page, "red.png", pngs.red, { openPlace: false });
+  await addTile(page, "blue.png", pngs.blue, { openPlace: false });
+
+  await selectControlTab(page, "4. Create");
+  const ids = await page.evaluate(() => Object.fromEntries(window.__tileBuilderDebug.getState().tiles.map((tile) => [tile.name, tile.id])));
+  await page.locator("#createTileB").selectOption(ids["blue.png"]);
+  await page.locator("#createBetweenMode").selectOption("include");
+  await page.locator("#createSplatter").fill("12");
+  await page.locator("#createNoise").fill("9");
+  await page.locator("#createCanvas").evaluate((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 20, ...point(0, canvas.height * 0.25) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 20, ...point(canvas.width, canvas.height * 0.45) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 20, ...point(canvas.width, canvas.height * 0.45) }));
+  });
+  await page.getByRole("button", { name: "Add Line" }).click();
+  await expect(page.locator("#createLineSelect")).toHaveValue("1");
+  const createPattern = await downloadJsonFromClick(page, () => page.locator("#saveCreatePattern").click());
+  expect(createPattern.filename).toBe("create-line-pattern.json");
+  expect(createPattern.json).toMatchObject({
+    format: "tile-builder-line-pattern",
+    target: "create",
+    betweenMode: "include",
+    splatter: 12,
+    noise: 9
+  });
+  expect(createPattern.json.cutLines).toHaveLength(2);
+
+  await page.locator("#createBetweenMode").selectOption("exclude");
+  await page.getByRole("button", { name: "Delete Line" }).click();
+  await page.locator("#createPatternFileInput").setInputFiles({
+    name: "create-pattern.json",
+    mimeType: "application/json",
+    buffer: createPattern.buffer
+  });
+  await expect(page.locator("#projectStatus")).toHaveText("Loaded Create line pattern from create-pattern.json.");
+  await expect(page.locator("#createBetweenMode")).toHaveValue("include");
+  await expect(page.locator("#createLineSelect")).toHaveValue("1");
+  await expect(page.locator("#createSplatter")).toHaveValue("12");
+  await expect(page.locator("#createNoise")).toHaveValue("9");
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().create.cutLines)).toHaveLength(2);
+
+  await selectControlTab(page, "5. Place");
+  await clickCell(page, 1, 1);
+  await selectControlTab(page, "6. Cull");
+  await page.locator("#cullBetweenMode").selectOption("include");
+  await page.locator("#cullSplatter").fill("15");
+  await page.locator("#cullNoise").fill("7");
+  await page.locator("#cullCanvas").evaluate((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const point = (x, y) => ({
+      clientX: rect.left + x / canvas.width * rect.width,
+      clientY: rect.top + y / canvas.height * rect.height
+    });
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 21, ...point(0, canvas.height * 0.35) }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 21, ...point(canvas.width, canvas.height * 0.55) }));
+    canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 21, ...point(canvas.width, canvas.height * 0.55) }));
+  });
+  await page.locator("#addCullLine").click();
+  await expect(page.locator("#cullLineSelect")).toHaveValue("1");
+  const cullPattern = await downloadJsonFromClick(page, () => page.locator("#saveCullPattern").click());
+  expect(cullPattern.filename).toBe("cull-line-pattern.json");
+  expect(cullPattern.json).toMatchObject({
+    format: "tile-builder-line-pattern",
+    target: "cull",
+    betweenMode: "include",
+    splatter: 15,
+    noise: 7
+  });
+  expect(cullPattern.json.cutLines).toHaveLength(2);
+
+  await page.locator("#cullBetweenMode").selectOption("exclude");
+  await page.locator("#deleteCullLine").click();
+  await page.locator("#cullPatternFileInput").setInputFiles({
+    name: "cull-pattern.json",
+    mimeType: "application/json",
+    buffer: cullPattern.buffer
+  });
+  await expect(page.locator("#projectStatus")).toHaveText("Loaded Cull line pattern from cull-pattern.json.");
+  await expect(page.locator("#cullBetweenMode")).toHaveValue("include");
+  await expect(page.locator("#cullLineSelect")).toHaveValue("1");
+  await expect(page.locator("#cullSplatter")).toHaveValue("15");
+  await expect(page.locator("#cullNoise")).toHaveValue("7");
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull.cutLines)).toHaveLength(2);
+});
+
 test("aligns cull preview grid and subgrid with each tile mode", async ({ page }) => {
   const cases = [
     { mode: "isometric", cols: 3, rows: 2, tileWidth: 64, tileHeight: 32 },
@@ -735,6 +842,40 @@ test("aligns cull preview grid and subgrid with each tile mode", async ({ page }
     });
 
     const cull = await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull);
+    if (mode === "isometric") {
+      const isoSnap = await page.evaluate(() => {
+        const state = window.__tileBuilderDebug.getState();
+        const canvas = document.querySelector("#cullCanvas");
+        const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+        const halfW = state.tileWidth / 2;
+        const halfH = state.tileHeight / 2;
+        const center = (x, y) => ({
+          x: pad + (state.rows - 1) * halfW + halfW + (x - y) * halfW,
+          y: pad + halfH + (x + y) * halfH
+        });
+        const topCell = center(0, 0);
+        const rightCell = center(state.cols - 1, 0);
+        const leftCell = center(0, state.rows - 1);
+        const footprint = {
+          top: { x: topCell.x, y: topCell.y - halfH },
+          right: { x: rightCell.x + halfW, y: rightCell.y },
+          left: { x: leftCell.x - halfW, y: leftCell.y }
+        };
+        const axisU = { x: footprint.right.x - footprint.top.x, y: footprint.right.y - footprint.top.y };
+        const axisV = { x: footprint.left.x - footprint.top.x, y: footprint.left.y - footprint.top.y };
+        const determinant = axisU.x * axisV.y - axisU.y * axisV.x;
+        return state.layerPlacements[0].cull.points.map((point) => {
+          const pixel = { x: point.x * canvas.width, y: point.y * canvas.height };
+          const relative = { x: pixel.x - footprint.top.x, y: pixel.y - footprint.top.y };
+          return {
+            u: (relative.x * axisV.y - relative.y * axisV.x) / determinant,
+            v: (axisU.x * relative.y - axisU.y * relative.x) / determinant
+          };
+        });
+      });
+      expect(isoSnap.every((point) => Math.abs(point.u * 4 - Math.round(point.u * 4)) < 0.001)).toBe(true);
+      expect(isoSnap.every((point) => Math.abs(point.v * 4 - Math.round(point.v * 4)) < 0.001)).toBe(true);
+    }
     const bounds = await page.evaluate(() => {
       const state = window.__tileBuilderDebug.getState();
       const pad = state.tileMode === "isometric"

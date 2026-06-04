@@ -257,6 +257,13 @@
                 <button id="createSideUpper" class="tool-button" type="button">Upper/Left</button>
                 <button id="createSideLower" class="tool-button is-active" type="button">Lower/Right</button>
               </div>
+              <label>
+                Between lines
+                <select id="createBetweenMode">
+                  <option value="exclude">Exclude area between lines</option>
+                  <option value="include">Include only area between lines</option>
+                </select>
+              </label>
             </fieldset>
             <fieldset class="palette-tool-group">
               <legend>Natural edge</legend>
@@ -277,6 +284,10 @@
             </fieldset>
             <fieldset class="palette-tool-group">
               <legend>Path control</legend>
+              <label>
+                Active line
+                <select id="createLineSelect"></select>
+              </label>
               <div class="create-path-grid">
                 <label>
                   Vertices
@@ -303,6 +314,17 @@
                 Vertex mode
               </label>
             </fieldset>
+            <div class="tool-row layer-control-row">
+              <button id="addCreateLine" class="secondary-button" type="button">Add Line</button>
+              <button id="deleteCreateLine" class="secondary-button" type="button">Delete Line</button>
+            </div>
+            <div class="tool-row layer-control-row">
+              <button id="saveCreatePattern" class="secondary-button" type="button">Save Pattern</button>
+              <label class="file-picker compact-file-picker">
+                <span>Load Pattern</span>
+                <input id="createPatternFileInput" type="file" accept=".json,application/json">
+              </label>
+            </div>
             <div class="tool-row layer-control-row">
               <button id="clearCreateLine" class="secondary-button" type="button">Reset Line</button>
               <button id="loadCreatedTile" class="secondary-button" type="button">Load Selected</button>
@@ -423,9 +445,37 @@
                 <button id="cullSideUpper" class="tool-button" type="button">Upper/Left</button>
                 <button id="cullSideLower" class="tool-button is-active" type="button">Lower/Right</button>
               </div>
+              <label>
+                Between lines
+                <select id="cullBetweenMode">
+                  <option value="exclude">Exclude area between lines</option>
+                  <option value="include">Include only area between lines</option>
+                </select>
+              </label>
+            </fieldset>
+            <fieldset class="palette-tool-group">
+              <legend>Natural edge</legend>
+              <div class="create-effect-grid">
+                <label>
+                  Feather
+                  <input id="cullFeather" type="number" min="0" max="96" value="0">
+                </label>
+                <label>
+                  Splatter
+                  <input id="cullSplatter" type="number" min="0" max="100" value="0">
+                </label>
+                <label>
+                  Noise
+                  <input id="cullNoise" type="number" min="0" max="100" value="0">
+                </label>
+              </div>
             </fieldset>
             <fieldset class="palette-tool-group">
               <legend>Path control</legend>
+              <label>
+                Active line
+                <select id="cullLineSelect"></select>
+              </label>
               <div class="create-path-grid">
                 <label>
                   Vertices
@@ -452,10 +502,17 @@
                 Vertex mode
               </label>
             </fieldset>
-            <label>
-              Feather
-              <input id="cullFeather" type="number" min="0" max="96" value="0">
-            </label>
+            <div class="tool-row layer-control-row">
+              <button id="addCullLine" class="secondary-button" type="button">Add Line</button>
+              <button id="deleteCullLine" class="secondary-button" type="button">Delete Line</button>
+            </div>
+            <div class="tool-row layer-control-row">
+              <button id="saveCullPattern" class="secondary-button" type="button">Save Pattern</button>
+              <label class="file-picker compact-file-picker">
+                <span>Load Pattern</span>
+                <input id="cullPatternFileInput" type="file" accept=".json,application/json">
+              </label>
+            </div>
             <button id="clearCullLine" class="secondary-button" type="button">Reset Line</button>
           </section>
           <section class="feature-panel cull-preview-panel">
