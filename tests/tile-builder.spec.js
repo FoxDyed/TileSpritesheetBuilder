@@ -721,6 +721,21 @@ test("draws an editable cull path on a placed layer and applies it to layer expo
   });
   expect(cullState.points).toHaveLength(4);
 
+  const previewCull = await page.locator("#cullCanvas").evaluate((canvas) => {
+    const ctx = canvas.getContext("2d");
+    const state = window.__tileBuilderDebug.getState();
+    const pad = Math.max(32, Math.ceil(Math.max(state.tileWidth, state.spriteHeight) * 0.35));
+    const centerX = pad + (state.rows - 1) * state.tileWidth / 2 + state.tileWidth / 2;
+    const centerY = pad + state.tileHeight / 2 + (1 + 1) * state.tileHeight / 2;
+    return {
+      above: [...ctx.getImageData(centerX, centerY - 12, 1, 1).data],
+      below: [...ctx.getImageData(centerX, centerY + 8, 1, 1).data]
+    };
+  });
+  expect(previewCull.above[0]).toBeLessThan(previewCull.below[0]);
+  expect(previewCull.below[0]).toBeGreaterThan(previewCull.below[2]);
+  expect(previewCull.below[3]).toBe(255);
+
   await clickExport(page, "Export Active Layer PNG");
   const exported = await (await page.waitForFunction(() => window.__lastTileDownload)).jsonValue();
   const inspected = await page.evaluate(async (href) => {
@@ -1264,14 +1279,15 @@ test("zooms create and cull preview canvases independently", async ({ page }) =>
   await page.getByRole("button", { name: "Zoom in create preview" }).click();
   await expect(page.locator("#createZoomScale")).toHaveText("Scale: 125%");
   await expect(page.locator("#createZoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.locator("#createCanvas")).toHaveCSS("transform", /matrix\(1\.25/);
+  await expect(page.locator("#createCanvas")).toHaveJSProperty("width", 160);
 
   await selectControlTab(page, "6. Cull");
+  const cullWidthBeforeZoom = await page.locator("#cullCanvas").evaluate((canvas) => canvas.width);
   await expect(page.locator("#cullZoomScale")).toHaveText("Scale: 100% (1:1)");
   await page.getByRole("button", { name: "Zoom in cull preview" }).click();
   await expect(page.locator("#cullZoomScale")).toHaveText("Scale: 125%");
   await expect(page.locator("#cullZoomScale")).toHaveClass(/is-scaled/);
-  await expect(page.locator("#cullCanvas")).toHaveCSS("transform", /matrix\(1\.25/);
+  await expect(page.locator("#cullCanvas")).toHaveJSProperty("width", Math.ceil(cullWidthBeforeZoom * 1.25));
   await expect(page.locator("#createZoomScale")).toHaveText("Scale: 125%");
 
   await page.locator("#cullZoomReset").click();

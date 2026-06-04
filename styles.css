@@ -812,8 +812,8 @@ button:disabled {
 #createCanvas,
 #cullCanvas {
   display: block;
-  max-width: 100%;
-  max-height: min(68vh, 680px);
+  max-width: none;
+  max-height: none;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: transparent;

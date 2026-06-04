@@ -1461,7 +1461,7 @@ function drawCreateSubgrid(width, height) {
 }
 
 function drawCreateVertices(points) {
-  const radius = Math.max(5, Math.ceil(Math.max(els.createCanvas.width, els.createCanvas.height) / 48));
+  const radius = Math.max(5, Math.ceil(Math.max(previewLogicalWidth(els.createCanvas), previewLogicalHeight(els.createCanvas)) / 48));
   createCtx.save();
   points.forEach((point, index) => {
     const active = index === state.create.activeVertexIndex;
@@ -1688,8 +1688,8 @@ function drawCreatePreview() {
   if (!els.createCanvas) return;
   syncCreateControlsFromState();
   const { width, height } = createOutputSize();
-  els.createCanvas.width = width;
-  els.createCanvas.height = height;
+  configurePreviewCanvas("create", width, height);
+  createCtx.setTransform(state.createPreviewScale, 0, 0, state.createPreviewScale, 0, 0);
   createCtx.clearRect(0, 0, width, height);
   createCtx.drawImage(buildTransitionCanvas(), 0, 0);
 
@@ -1719,7 +1719,6 @@ function drawCreatePreview() {
   els.createPreviewStatus.textContent = tileB
     ? `Previewing ${tileB.name} over ${tileA}${decoration}. Add Transition creates a new palette tile.`
     : "Import at least one tile, then choose Tile B.";
-  updatePreviewZoom("create");
 }
 
 function readCreateEffectControls() {
@@ -1975,7 +1974,7 @@ function snapCullPoint(point, cull, width, height) {
   };
 }
 
-function setCullPointsFromPixels(cull, points, width = els.cullCanvas.width, height = els.cullCanvas.height) {
+function setCullPointsFromPixels(cull, points, width = previewLogicalWidth(els.cullCanvas), height = previewLogicalHeight(els.cullCanvas)) {
   setActiveEditorLinePoints(cull, normalizeCreatePoints(points, width, height));
 }
 
@@ -2096,7 +2095,7 @@ function drawCullSubgrid(width, height, cull) {
 }
 
 function drawCullVertices(points, cull) {
-  const radius = Math.max(5, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 90));
+  const radius = Math.max(5, Math.ceil(Math.max(previewLogicalWidth(els.cullCanvas), previewLogicalHeight(els.cullCanvas)) / 90));
   cullCtx.save();
   points.forEach((point, index) => {
     const active = index === cull.activeVertexIndex;
@@ -2126,23 +2125,30 @@ function drawCullPreview() {
   syncCullControlsFromState();
   const layer = cullLayer();
   const cull = layer.cull;
-  els.cullCanvas.width = els.gridCanvas.width;
-  els.cullCanvas.height = els.gridCanvas.height;
-  cullCtx.clearRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
-  cullCtx.fillStyle = cssVar("--canvas-bg");
-  cullCtx.fillRect(0, 0, els.cullCanvas.width, els.cullCanvas.height);
+  const width = els.gridCanvas.width;
+  const height = els.gridCanvas.height;
+  configurePreviewCanvas("cull", width, height);
+  cullCtx.setTransform(state.cullPreviewScale, 0, 0, state.cullPreviewScale, 0, 0);
+  cullCtx.clearRect(0, 0, width, height);
   renderSingleLayerToCanvas(layer, cullCtx);
+  if (cull.enabled && hasDrawableCullLines(cull)) {
+    const mask = createCullMaskCanvas(width, height, cull);
+    cullCtx.save();
+    cullCtx.globalCompositeOperation = "destination-in";
+    cullCtx.drawImage(mask, 0, 0);
+    cullCtx.restore();
+  }
   drawProjectGrid(cullCtx);
-  const lineSets = allCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height)
+  const lineSets = allCullLinePixels(cull, width, height)
     .map((points) => resamplePath(points, cull.vertexCount));
-  const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
-  drawCullSubgrid(els.cullCanvas.width, els.cullCanvas.height, cull);
+  const points = activeCullLinePixels(cull, width, height);
+  drawCullSubgrid(width, height, cull);
   lineSets.forEach((line, index) => {
     if (line.length < 2) return;
     cullCtx.save();
     const active = index === cull.activeLineIndex;
     cullCtx.strokeStyle = editorLineColor(index, active);
-    cullCtx.lineWidth = active ? Math.max(3, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 360)) : 2;
+    cullCtx.lineWidth = active ? Math.max(3, Math.ceil(Math.max(width, height) / 360)) : 2;
     cullCtx.setLineDash([10, 6]);
     cullCtx.beginPath();
     traceCreatePath(cullCtx, simplifyStrokePoints(line), cull.lineMode);
@@ -2151,8 +2157,7 @@ function drawCullPreview() {
   });
   drawCullVertices(points, cull);
   const placementCount = layer.placements.size;
-  els.cullPreviewStatus.textContent = `${layer.name}: ${placementCount} placed tile${placementCount === 1 ? "" : "s"}. ${cull.enabled ? "Cull enabled for exports." : "Cull disabled for exports."}`;
-  updatePreviewZoom("cull");
+  els.cullPreviewStatus.textContent = `${layer.name}: ${placementCount} placed tile${placementCount === 1 ? "" : "s"}. ${cull.enabled ? "Cull enabled for preview and exports." : "Cull disabled for exports."}`;
 }
 
 function createCullMaskCanvas(width, height, cull) {
@@ -2348,14 +2353,28 @@ function previewZoomConfig(kind) {
       };
 }
 
-function updatePreviewZoom(kind) {
+function previewLogicalWidth(canvas) {
+  return Number.parseFloat(canvas.dataset.logicalWidth) || canvas.width;
+}
+
+function previewLogicalHeight(canvas) {
+  return Number.parseFloat(canvas.dataset.logicalHeight) || canvas.height;
+}
+
+function configurePreviewCanvas(kind, logicalWidth = null, logicalHeight = null) {
   const config = previewZoomConfig(kind);
   const scale = state[config.stateKey];
-  config.canvas.style.transform = `scale(${scale})`;
+  const width = logicalWidth ?? previewLogicalWidth(config.canvas);
+  const height = logicalHeight ?? previewLogicalHeight(config.canvas);
+  config.canvas.dataset.logicalWidth = String(width);
+  config.canvas.dataset.logicalHeight = String(height);
+  config.canvas.width = Math.max(1, Math.ceil(width * scale));
+  config.canvas.height = Math.max(1, Math.ceil(height * scale));
   config.canvas.style.width = `${config.canvas.width}px`;
   config.canvas.style.height = `${config.canvas.height}px`;
-  config.canvas.style.marginRight = `${Math.max(0, config.canvas.width * scale - config.canvas.width)}px`;
-  config.canvas.style.marginBottom = `${Math.max(0, config.canvas.height * scale - config.canvas.height)}px`;
+  config.canvas.style.marginRight = "0";
+  config.canvas.style.marginBottom = "0";
+  config.canvas.style.transform = "none";
   config.label.textContent = previewScaleLabel(scale);
   config.label.classList.toggle("is-scaled", scale !== 1);
   config.out.disabled = scale === viewerZoomLevels[0];
@@ -2365,7 +2384,8 @@ function updatePreviewZoom(kind) {
 function setPreviewScale(kind, nextScale) {
   const config = previewZoomConfig(kind);
   state[config.stateKey] = Number(nextScale.toFixed(2));
-  updatePreviewZoom(kind);
+  if (kind === "cull") drawCullPreview();
+  else drawCreatePreview();
 }
 
 function stepPreviewZoom(kind, direction) {
@@ -3819,19 +3839,23 @@ function cropPointer(event) {
 
 function createPointer(event) {
   const rect = els.createCanvas.getBoundingClientRect();
+  const width = previewLogicalWidth(els.createCanvas);
+  const height = previewLogicalHeight(els.createCanvas);
   return {
-    x: Math.min(els.createCanvas.width, Math.max(0, (event.clientX - rect.left) * (els.createCanvas.width / rect.width))),
-    y: Math.min(els.createCanvas.height, Math.max(0, (event.clientY - rect.top) * (els.createCanvas.height / rect.height)))
+    x: Math.min(width, Math.max(0, (event.clientX - rect.left) * (width / rect.width))),
+    y: Math.min(height, Math.max(0, (event.clientY - rect.top) * (height / rect.height)))
   };
 }
 
-function setCreatePointsFromPixels(points, width = els.createCanvas.width, height = els.createCanvas.height) {
+function setCreatePointsFromPixels(points, width = previewLogicalWidth(els.createCanvas), height = previewLogicalHeight(els.createCanvas)) {
   setActiveEditorLinePoints(state.create, normalizeCreatePoints(points, width, height));
 }
 
 function nearestCreateVertex(point) {
-  const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
-  const radius = Math.max(12, Math.ceil(Math.max(els.createCanvas.width, els.createCanvas.height) / 20));
+  const width = previewLogicalWidth(els.createCanvas);
+  const height = previewLogicalHeight(els.createCanvas);
+  const points = activeCreateLinePixels(width, height);
+  const radius = Math.max(12, Math.ceil(Math.max(width, height) / 20));
   let closest = { index: -1, distance: Infinity };
   points.forEach((vertex, index) => {
     const distance = Math.hypot(point.x - vertex.x, point.y - vertex.y);
@@ -3842,7 +3866,9 @@ function nearestCreateVertex(point) {
 
 function setCreateVertexCount() {
   const nextCount = clampNumber(els.createVertexCount.value, 2, 24, state.create.vertexCount);
-  const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+  const width = previewLogicalWidth(els.createCanvas);
+  const height = previewLogicalHeight(els.createCanvas);
+  const points = activeCreateLinePixels(width, height);
   state.create.vertexCount = nextCount;
   els.createVertexCount.value = nextCount;
   setCreatePointsFromPixels(resamplePath(points, nextCount));
@@ -3858,8 +3884,10 @@ function updateCreatePathControls() {
   state.create.vertexMode = els.createVertexMode.checked;
   els.createGridDivisions.value = state.create.gridDivisions;
   if (state.create.snapToGrid && (!previousSnap || state.create.points.length > 0)) {
-    const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height)
-      .map((point) => snapCreatePoint(point, els.createCanvas.width, els.createCanvas.height));
+    const width = previewLogicalWidth(els.createCanvas);
+    const height = previewLogicalHeight(els.createCanvas);
+    const points = activeCreateLinePixels(width, height)
+      .map((point) => snapCreatePoint(point, width, height));
     setCreatePointsFromPixels(points);
   }
   drawCreatePreview();
@@ -3867,6 +3895,8 @@ function updateCreatePathControls() {
 
 function beginCreateStroke(event) {
   if (!state.create.tileBId) return;
+  const width = previewLogicalWidth(els.createCanvas);
+  const height = previewLogicalHeight(els.createCanvas);
   const rawPoint = createPointer(event);
   const vertexIndex = nearestCreateVertex(rawPoint);
   if (vertexIndex >= 0) {
@@ -3878,7 +3908,7 @@ function beginCreateStroke(event) {
     return;
   }
   if (state.create.vertexMode) return;
-  const point = snapCreatePoint(rawPoint, els.createCanvas.width, els.createCanvas.height);
+  const point = snapCreatePoint(rawPoint, width, height);
   state.create.drawing = true;
   state.create.draggingVertex = false;
   state.create.activeVertexIndex = -1;
@@ -3889,15 +3919,17 @@ function beginCreateStroke(event) {
 
 function continueCreateStroke(event) {
   if (!state.create.drawing && !state.create.draggingVertex) return;
-  const point = snapCreatePoint(createPointer(event), els.createCanvas.width, els.createCanvas.height);
+  const width = previewLogicalWidth(els.createCanvas);
+  const height = previewLogicalHeight(els.createCanvas);
+  const point = snapCreatePoint(createPointer(event), width, height);
   if (state.create.draggingVertex) {
-    const points = activeCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+    const points = activeCreateLinePixels(width, height);
     points[state.create.activeVertexIndex] = point;
     setCreatePointsFromPixels(points);
     drawCreatePreview();
     return;
   }
-  const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+  const points = storedCreateLinePixels(width, height);
   const previous = points[points.length - 1];
   if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3) return;
   points.push(point);
@@ -3909,12 +3941,14 @@ function endCreateStroke(event) {
   if (!state.create.drawing && !state.create.draggingVertex) return;
   continueCreateStroke(event);
   if (state.create.drawing) {
-    const points = storedCreateLinePixels(els.createCanvas.width, els.createCanvas.height);
+    const width = previewLogicalWidth(els.createCanvas);
+    const height = previewLogicalHeight(els.createCanvas);
+    const points = storedCreateLinePixels(width, height);
     if (points.length < 2) {
-      points.push({ x: els.createCanvas.width - points[0].x, y: els.createCanvas.height - points[0].y });
+      points.push({ x: width - points[0].x, y: height - points[0].y });
     }
     const resampled = resamplePath(points, state.create.vertexCount)
-      .map((point) => snapCreatePoint(point, els.createCanvas.width, els.createCanvas.height));
+      .map((point) => snapCreatePoint(point, width, height));
     setCreatePointsFromPixels(resampled);
   }
   state.create.drawing = false;
@@ -3925,15 +3959,19 @@ function endCreateStroke(event) {
 
 function cullPointer(event) {
   const rect = els.cullCanvas.getBoundingClientRect();
+  const width = previewLogicalWidth(els.cullCanvas);
+  const height = previewLogicalHeight(els.cullCanvas);
   return {
-    x: Math.min(els.cullCanvas.width, Math.max(0, (event.clientX - rect.left) * (els.cullCanvas.width / rect.width))),
-    y: Math.min(els.cullCanvas.height, Math.max(0, (event.clientY - rect.top) * (els.cullCanvas.height / rect.height)))
+    x: Math.min(width, Math.max(0, (event.clientX - rect.left) * (width / rect.width))),
+    y: Math.min(height, Math.max(0, (event.clientY - rect.top) * (height / rect.height)))
   };
 }
 
 function nearestCullVertex(point, cull) {
-  const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
-  const radius = Math.max(14, Math.ceil(Math.max(els.cullCanvas.width, els.cullCanvas.height) / 45));
+  const width = previewLogicalWidth(els.cullCanvas);
+  const height = previewLogicalHeight(els.cullCanvas);
+  const points = activeCullLinePixels(cull, width, height);
+  const radius = Math.max(14, Math.ceil(Math.max(width, height) / 45));
   let closest = { index: -1, distance: Infinity };
   points.forEach((vertex, index) => {
     const distance = Math.hypot(point.x - vertex.x, point.y - vertex.y);
@@ -3945,6 +3983,8 @@ function nearestCullVertex(point, cull) {
 function beginCullStroke(event) {
   const layer = cullLayer();
   const cull = layer.cull;
+  const width = previewLogicalWidth(els.cullCanvas);
+  const height = previewLogicalHeight(els.cullCanvas);
   const rawPoint = cullPointer(event);
   const vertexIndex = nearestCullVertex(rawPoint, cull);
   if (vertexIndex >= 0) {
@@ -3956,7 +3996,7 @@ function beginCullStroke(event) {
     return;
   }
   if (cull.vertexMode) return;
-  const point = snapCullPoint(rawPoint, cull, els.cullCanvas.width, els.cullCanvas.height);
+  const point = snapCullPoint(rawPoint, cull, width, height);
   cull.drawing = true;
   cull.draggingVertex = false;
   cull.activeVertexIndex = -1;
@@ -3969,15 +4009,17 @@ function beginCullStroke(event) {
 function continueCullStroke(event) {
   const cull = cullLayer().cull;
   if (!cull.drawing && !cull.draggingVertex) return;
-  const point = snapCullPoint(cullPointer(event), cull, els.cullCanvas.width, els.cullCanvas.height);
+  const width = previewLogicalWidth(els.cullCanvas);
+  const height = previewLogicalHeight(els.cullCanvas);
+  const point = snapCullPoint(cullPointer(event), cull, width, height);
   if (cull.draggingVertex) {
-    const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+    const points = activeCullLinePixels(cull, width, height);
     points[cull.activeVertexIndex] = point;
     setCullPointsFromPixels(cull, points);
     drawCullPreview();
     return;
   }
-  const points = storedCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+  const points = storedCullLinePixels(cull, width, height);
   const previous = points[points.length - 1];
   if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 3) return;
   points.push(point);
@@ -3990,12 +4032,14 @@ function endCullStroke(event) {
   if (!cull.drawing && !cull.draggingVertex) return;
   continueCullStroke(event);
   if (cull.drawing) {
-    const points = storedCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+    const width = previewLogicalWidth(els.cullCanvas);
+    const height = previewLogicalHeight(els.cullCanvas);
+    const points = storedCullLinePixels(cull, width, height);
     if (points.length < 2) {
-      points.push({ x: els.cullCanvas.width - points[0].x, y: els.cullCanvas.height - points[0].y });
+      points.push({ x: width - points[0].x, y: height - points[0].y });
     }
     const resampled = resamplePath(points, cull.vertexCount)
-      .map((point) => snapCullPoint(point, cull, els.cullCanvas.width, els.cullCanvas.height));
+      .map((point) => snapCullPoint(point, cull, width, height));
     setCullPointsFromPixels(cull, resampled);
   }
   cull.drawing = false;
@@ -4022,11 +4066,13 @@ function setCullLine(index) {
 function addCullLine() {
   const cull = cullLayer().cull;
   syncEditorLegacyPoints(cull);
+  const width = previewLogicalWidth(els.cullCanvas);
+  const height = previewLogicalHeight(els.cullCanvas);
   const offset = Math.min(0.18, 0.05 * cull.cutLines.length);
-  const points = normalizeCreatePoints(defaultCullLine(els.cullCanvas.width, els.cullCanvas.height).map((point) => ({
+  const points = normalizeCreatePoints(defaultCullLine(width, height).map((point) => ({
     x: point.x,
-    y: Math.min(els.cullCanvas.height, Math.max(0, point.y + els.cullCanvas.height * offset))
-  })), els.cullCanvas.width, els.cullCanvas.height);
+    y: Math.min(height, Math.max(0, point.y + height * offset))
+  })), width, height);
   cull.cutLines.push({ points });
   cull.activeLineIndex = cull.cutLines.length - 1;
   cull.points = points;
@@ -4065,8 +4111,10 @@ function updateCullControls() {
   els.cullSplatter.value = cull.splatter;
   els.cullNoise.value = cull.noise;
   if (cull.snapToGrid && cull.points.length > 0) {
-    const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height)
-      .map((point) => snapCullPoint(point, cull, els.cullCanvas.width, els.cullCanvas.height));
+    const width = previewLogicalWidth(els.cullCanvas);
+    const height = previewLogicalHeight(els.cullCanvas);
+    const points = activeCullLinePixels(cull, width, height)
+      .map((point) => snapCullPoint(point, cull, width, height));
     setCullPointsFromPixels(cull, points);
   }
   drawCullPreview();
@@ -4075,7 +4123,9 @@ function updateCullControls() {
 function setCullVertexCount() {
   const cull = cullLayer().cull;
   const nextCount = clampNumber(els.cullVertexCount.value, 2, 24, cull.vertexCount);
-  const points = activeCullLinePixels(cull, els.cullCanvas.width, els.cullCanvas.height);
+  const width = previewLogicalWidth(els.cullCanvas);
+  const height = previewLogicalHeight(els.cullCanvas);
+  const points = activeCullLinePixels(cull, width, height);
   cull.vertexCount = nextCount;
   els.cullVertexCount.value = nextCount;
   setCullPointsFromPixels(cull, resamplePath(points, nextCount));
@@ -4293,8 +4343,6 @@ resizeGridCanvas();
 renderPalette();
 renderLayers();
 renderGrid();
-updatePreviewZoom("create");
-updatePreviewZoom("cull");
 applyResponsiveViewerScale();
 updateStats();
 updateContextHelp();
