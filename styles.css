@@ -139,7 +139,7 @@ input {
 .export-screen {
   min-height: 0;
   overflow: auto;
-  padding: 26px 30px;
+  padding: 26px 360px 26px 30px;
 }
 
 .place-screen {
@@ -191,6 +191,62 @@ input {
 .project-layout {
   grid-template-columns: minmax(0, 620px) minmax(240px, 340px);
   justify-content: center;
+}
+
+.context-help {
+  position: fixed;
+  right: 18px;
+  top: 142px;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  width: 320px;
+  max-height: calc(100vh - 162px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.context-help h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.context-help p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.help-details {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.help-details div {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.help-details dt {
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.help-details dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .feature-panel {
@@ -820,6 +876,12 @@ button:disabled {
   min-width: 0;
 }
 
+@media (min-width: 1041px) {
+  .place-screen .workspace {
+    margin-right: 340px;
+  }
+}
+
 .canvas-toolbar {
   display: flex;
   align-items: center;
@@ -1018,6 +1080,22 @@ button:disabled {
 @media (max-width: 1040px) {
   .palette-manager-layout {
     grid-template-columns: 1fr;
+  }
+
+  .project-screen,
+  .import-screen,
+  .palette-screen,
+  .create-screen,
+  .cull-screen,
+  .export-screen {
+    padding-right: 14px;
+  }
+
+  .context-help {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin: 0 14px 18px;
   }
 }
 

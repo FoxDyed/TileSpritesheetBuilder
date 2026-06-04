@@ -75,6 +75,10 @@ const viewerZoomLevels = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const els = {
   controlTabs: [...document.querySelectorAll('[role="tab"]')],
   controlTabPanels: [...document.querySelectorAll('[role="tabpanel"]')],
+  contextHelp: document.querySelector("#contextHelp"),
+  contextHelpTitle: document.querySelector("#contextHelpTitle"),
+  contextHelpBody: document.querySelector("#contextHelpBody"),
+  contextHelpDetails: document.querySelector("#contextHelpDetails"),
   gridCols: document.querySelector("#gridCols"),
   gridRows: document.querySelector("#gridRows"),
   tileWidth: document.querySelector("#tileWidth"),
@@ -235,6 +239,236 @@ function updateExportColumns() {
   els.exportCols.value = state.exportCols;
 }
 
+let lastHelpControlId = null;
+
+const tabHelp = {
+  projectTab: {
+    title: "Project Setup",
+    body: "Set the project projection and dimensions before importing or placing tiles. Tile mode controls the grid geometry, cell size controls the editable map cells, and sprite size controls how sheets are sliced and how palette sprites are prepared."
+  },
+  importTab: {
+    title: "Import Sprites",
+    body: "Add source PNGs for the palette. Individual PNGs open the crop tool so oversized art can be aligned to the tile anchor; sprite sheets are sliced using the sprite width and height from Project Setup."
+  },
+  paletteTab: {
+    title: "Manage Palette",
+    body: "Use this tab to clean up reusable source sprites. Edits here affect the selected palette tile, so clone a tile first when you want an alternate version without changing the original."
+  },
+  createTab: {
+    title: "Create Transitions",
+    body: "Create builds a new single palette tile from Tile A, Tile B, optional decorative Tile C, and one or more editable cut lines. Saving adds a new tile to the palette and leaves the original tiles untouched."
+  },
+  placeTab: {
+    title: "Place Sprites",
+    body: "Paint palette tiles onto the project grid. The active layer controls where new placements go, while the current tool controls whether clicks paint, move, erase, or select a group."
+  },
+  cullTab: {
+    title: "Cull Layers",
+    body: "Cull applies transition-style cut lines across a whole placed layer instead of a single tile. This is useful for trimming large terrain regions while preserving the palette sprites and placement data."
+  },
+  exportTab: {
+    title: "Export",
+    body: "Download the finished assets. Sprite sheet export packs the palette, full scene export renders visible layers together, and active layer export renders just the selected layer on a transparent canvas."
+  }
+};
+
+const controlHelp = {
+  tileMode: ["Tile Mode", "Choose the map projection. Isometric draws diamond cells and matching subgrids, orthographic uses angled tile art on a regular grid, and top-down uses square or rectangular cells for overhead projects."],
+  gridCols: ["Columns", "Sets how many cells the project grid has from left to right. More columns give more terrain space but increase the exported scene size."],
+  gridRows: ["Rows", "Sets how many cells the project grid has from top to bottom. This affects the Place and Cull tabs and the size of scene or layer exports."],
+  tileWidth: ["Cell Width", "Controls the logical width of each grid cell. For isometric projects this is the diamond width; for orthographic and top-down projects it is the cell width."],
+  tileHeight: ["Cell Height", "Controls the logical height of each grid cell. Isometric cells usually use a height around half the width, while top-down cells often match the width."],
+  spriteWidth: ["Sprite Width", "Controls the width used when slicing sprite sheets and preparing imported tiles. It can be larger than the cell width when art needs overhang."],
+  spriteHeight: ["Sprite Height", "Controls the height used when slicing sprite sheets and preparing imported tiles. Increase it for tall objects, walls, cliffs, or sprites that extend above the tile anchor."],
+  applySettings: ["Apply Settings", "Applies the project dimensions to the working grid. Existing placements are kept where possible, but changing dimensions can alter how the map is displayed and exported."],
+  saveProject: ["Save Project", "Downloads a JSON project file with settings, palette tiles, placements, layers, transition recipes, cut lines, cull lines, and effect values so the work can be restored later."],
+  projectFileInput: ["Load Project", "Loads a saved project JSON. This restores the whole workspace, including editable line data and layer cull settings."],
+  fileInput: ["Add PNGs", "Imports one or more PNG files as palette tiles. Each file opens the crop editor so the image can be aligned to the project sprite size."],
+  sheetFileInput: ["Import Sprite Sheet", "Slices a PNG sheet into tiles using the Project tab sprite width and height. Use this when a sheet already has evenly spaced frames."],
+  savePalette: ["Save Palette", "Downloads just the palette as JSON. This is useful for reusing source and transition tiles in a different project."],
+  paletteFileInput: ["Load Palette", "Adds tiles from a saved palette JSON into the current project without replacing the grid layout."],
+  paletteTileName: ["Sprite Name", "Renames the selected palette tile. Clear, descriptive names make Create, Place, and Cull selections easier to manage."],
+  renameTile: ["Rename Tile", "Applies the sprite name field to the selected palette tile."],
+  cloneTile: ["Clone Tile", "Duplicates the selected palette tile before edits. Use this before tinting, cropping, or transforming when the original should stay available."],
+  recropTile: ["Re-crop", "Reopens the crop editor for the selected tile so its anchor, padding, or visible area can be adjusted."],
+  rotateTileLeft: ["Rotate Left", "Rotates the selected palette tile 90 degrees counterclockwise."],
+  rotateTileRight: ["Rotate Right", "Rotates the selected palette tile 90 degrees clockwise."],
+  flipTileHorizontal: ["Flip Horizontal", "Mirrors the selected palette tile from left to right."],
+  flipTileVertical: ["Flip Vertical", "Mirrors the selected palette tile from top to bottom."],
+  deleteTile: ["Delete Tile", "Removes the selected tile from the palette. Placements that used the tile may no longer render, so save the project first if unsure."],
+  tileTintColor: ["Tint Color", "Chooses the color applied by Minimal recolor. Lower strength keeps more of the original sprite detail."],
+  tileTintStrength: ["Tint Strength", "Controls how strongly the tint color is blended into the selected tile."],
+  applyTileTint: ["Apply Tint", "Applies the selected tint color and strength to the current palette tile."],
+  transparentTileColor: ["Remove Color", "Chooses a color to turn transparent in the selected tile. Use tolerance to catch nearby shades."],
+  transparentTileTolerance: ["Transparency Tolerance", "Controls how close pixels must be to the remove color before they become transparent."],
+  makeTileColorTransparent: ["Make Transparent", "Removes the chosen color from the selected tile, useful for cleaning solid backgrounds."],
+  createTileA: ["Tile A", "Selects the under layer for the transition tile. Choose Transparent background when the cut should reveal empty space instead of another tile."],
+  createTileB: ["Tile B", "Selects the over layer used on the kept side of the cut. This is the main sprite that blends into Tile A or transparency."],
+  createTileC: ["Layer C", "Adds an optional decorative sprite above the transition, such as pebbles, grass flecks, edge debris, or highlight detail."],
+  createDecorationBlend: ["Decoration Blend", "Changes how Layer C combines with the transition. Normal preserves the sprite, while multiply, screen, overlay, and soft light can make decoration blend into the materials below."],
+  createDecorationOpacity: ["Decoration Opacity", "Controls how visible Layer C is. Lower values make decorative effects subtle; higher values make them read as a clear top layer."],
+  createTileName: ["Output Name", "Names the new transition tile that will be added to the palette. The source tiles are not changed."],
+  createSideUpper: ["Upper/Left Side", "Keeps or applies Tile B on the upper or left side of the active cut line, depending on the line direction and tile mode."],
+  createSideLower: ["Lower/Right Side", "Keeps or applies Tile B on the lower or right side of the active cut line, depending on the line direction and tile mode."],
+  createBetweenMode: ["Between Lines", "When multiple cut lines exist, Exclude removes the area between paired lines while Include keeps only the band between them. This makes paths, rivers, cliffs, and layered borders easier to shape."],
+  createFeather: ["Feather", "Softens the cut edge by blending pixels across the boundary. Use small values for crisp tile art and larger values for organic terrain."],
+  createSplatter: ["Splatter", "Adds irregular speckling around the cut. This helps grass, dirt, gravel, snow, and other natural materials avoid a perfectly clean edge."],
+  createNoise: ["Noise", "Adds small random variation along the edge so the transition feels less uniform."],
+  createLineSelect: ["Active Line", "Chooses which saved cut line is currently editable. Each line keeps its own vertices and can be adjusted independently."],
+  createVertexCount: ["Vertices", "Changes how many editable points the active line has. More vertices allow a more custom shape; fewer vertices are easier to manage."],
+  createGridDivisions: ["Subgrid", "Sets the number of snap divisions drawn over the tile. More divisions give finer vertex placement."],
+  createLineMode: ["Segment Mode", "Tangent mode draws smoother curved segments through the vertices. Straight mode connects vertices with hard line segments for precise cuts."],
+  createSnapToGrid: ["Snap Vertices To Grid", "Snaps moved vertices to the subgrid. This is helpful when matching edges across related transition tiles."],
+  createVertexMode: ["Vertex Mode", "When enabled, touching the preview only manipulates existing vertices. Turn it off when you want to draw a new custom line shape."],
+  addCreateLine: ["Add Line", "Adds another editable cut line to the transition. Multiple lines can define bands, channels, borders, and more complex masks."],
+  deleteCreateLine: ["Delete Line", "Deletes the active cut line while leaving the other saved lines intact."],
+  saveCreatePattern: ["Save Pattern", "Downloads the Create tab line pattern as JSON, including vertices, line mode, snap settings, between-line mode, and natural edge effects."],
+  createPatternFileInput: ["Load Pattern", "Loads a saved Create pattern so the same transition shape can be reused on other tile pairs."],
+  clearCreateLine: ["Reset Line", "Clears the active Create cut line and returns it to a fresh editable state."],
+  loadCreatedTile: ["Load Selected", "If the selected palette tile was created here, this restores its saved transition recipe for fine tuning."],
+  addCreatedTile: ["Add Transition", "Renders the current transition as a new palette tile. Original Tile A, Tile B, and Tile C stay unchanged."],
+  createCanvas: ["Cut Preview", "Draw or edit the active transition line here. Drag vertices to refine the shape; use vertex mode when you only want edits, not a new line."],
+  paintTool: ["Paint Tool", "Places the selected palette tile onto clicked grid cells on the active layer."],
+  dropTool: ["Move Tool", "Picks up an existing placement and drops it somewhere else on the active layer."],
+  eraseTool: ["Erase Tool", "Removes placements from clicked cells on the active layer."],
+  groupMoveTool: ["Select Group", "Selects multiple placed cells so they can be moved together as a terrain block."],
+  moveSelectedGroup: ["Move Selected", "Starts moving the current group selection to a new grid position."],
+  cancelGroupMove: ["Cancel Selection", "Clears the current group selection or cancels a group move."],
+  layerName: ["Layer Name", "Renames the active layer. Layer names appear in Place, Cull, project saves, and layer exports."],
+  renameLayer: ["Rename Layer", "Applies the layer name field to the active layer."],
+  moveLayerUp: ["Move Up", "Moves the active layer later in the render order so it appears in front of lower layers."],
+  moveLayerDown: ["Move Down", "Moves the active layer earlier in the render order so it appears behind higher layers."],
+  addLayer: ["Add Layer", "Creates a new empty placement layer. Use layers to separate ground, props, overlays, or alternate terrain passes."],
+  deleteLayer: ["Delete Layer", "Deletes the active layer and its placements. Keep at least one layer in the project."],
+  clearGrid: ["Clear Grid", "Removes all placements from the active layer."],
+  zoomOut: ["Zoom Out", "Zooms the placement canvas out so more of the grid is visible."],
+  zoomIn: ["Zoom In", "Zooms the placement canvas in for more precise editing."],
+  zoomReset: ["Reset Zoom", "Returns the placement canvas to 1:1 scale."],
+  gridCanvas: ["Placement Grid", "Click the grid with the active tool. Empty cells remain visible, and the grid shape follows the selected project tile mode."],
+  cullLayerSelect: ["Cull Layer", "Chooses which placed layer receives the cull lines. The preview mirrors the Place grid so cuts can be aligned to the terrain layout."],
+  cullEnabled: ["Enable Layer Cull", "Turns the selected layer's cull mask on or off without deleting the saved lines."],
+  cullSideUpper: ["Upper/Left Side", "Keeps the upper or left side of the active cull line visible for the selected layer."],
+  cullSideLower: ["Lower/Right Side", "Keeps the lower or right side of the active cull line visible for the selected layer."],
+  cullBetweenMode: ["Between Lines", "Controls how multiple layer cull lines combine. Exclude removes the area between lines; Include keeps only the band between lines."],
+  cullFeather: ["Cull Feather", "Softens the layer mask edge. This is useful for larger terrain blends where a hard crop would look artificial."],
+  cullSplatter: ["Cull Splatter", "Adds irregular breakup to the layer mask edge so large terrain transitions feel more natural."],
+  cullNoise: ["Cull Noise", "Adds edge variation to the layer cull, helping repeated grid shapes feel less mechanical."],
+  cullLineSelect: ["Active Cull Line", "Chooses which saved cull line is currently editable on the selected layer."],
+  cullVertexCount: ["Cull Vertices", "Changes how many editable points the active cull line has."],
+  cullGridDivisions: ["Cull Subgrid", "Sets the subgrid divisions across the full visible placement grid. In isometric projects the subgrid follows the isometric grid."],
+  cullLineMode: ["Cull Segment Mode", "Tangent mode makes smoother terrain boundaries; Straight mode makes precise angular cuts."],
+  cullSnapToGrid: ["Snap Cull Vertices", "Snaps moved cull vertices to the layer subgrid so cuts align cleanly across the tile grid."],
+  cullVertexMode: ["Cull Vertex Mode", "When enabled, touching the cull preview only moves existing vertices instead of starting a new line."],
+  addCullLine: ["Add Cull Line", "Adds another editable cull line to the selected layer."],
+  deleteCullLine: ["Delete Cull Line", "Deletes the active cull line from the selected layer."],
+  saveCullPattern: ["Save Cull Pattern", "Downloads the cull line pattern for reuse, including vertices, line settings, between-line behavior, and edge effects."],
+  cullPatternFileInput: ["Load Cull Pattern", "Loads a saved cull pattern onto the selected layer."],
+  clearCullLine: ["Reset Cull Line", "Clears the active cull line while keeping the layer and other lines available."],
+  cullCanvas: ["Layer Preview", "Draw or adjust layer cull lines over the full grid preview. Empty cells remain visible so cuts can be aligned across the project."],
+  exportCols: ["Sprite Sheet Columns", "Sets how many palette sprites appear in each row of the exported sprite sheet."],
+  exportButton: ["Export PNG", "Downloads a packed palette sprite sheet using the current column count."],
+  exportMapButton: ["Export Full Scene PNG", "Downloads the visible placed layers as one rendered scene PNG."],
+  exportLayerButton: ["Export Active Layer PNG", "Downloads only the active layer on a transparent canvas, including any enabled cull mask."]
+};
+
+function activeControlTabId() {
+  return els.controlTabs.find((tab) => tab.classList.contains("is-active"))?.id || "projectTab";
+}
+
+function helpTileName(id, transparentLabel = "Transparent") {
+  if (id === "transparent") return transparentLabel;
+  if (id === "none") return "None";
+  return state.tiles.find((tile) => tile.id === id)?.name || "None selected";
+}
+
+function lineSummary(editor) {
+  const lineCount = Math.max(1, editor.cutLines?.length || 1);
+  return `Line ${Math.min(editor.activeLineIndex + 1, lineCount)} of ${lineCount}`;
+}
+
+function tabHelpDetails(tabId) {
+  const layer = activeLayer();
+  const cull = cullLayer().cull;
+  const details = {
+    projectTab: [
+      ["Mode", `${state.tileMode}; ${state.cols} x ${state.rows} cells`],
+      ["Cell", `${state.tileWidth} x ${state.tileHeight}px`],
+      ["Sprite", `${state.spriteWidth} x ${state.spriteHeight}px`]
+    ],
+    importTab: [
+      ["Imported", `${state.tiles.length} palette sprite${state.tiles.length === 1 ? "" : "s"}`],
+      ["Sheet slicing", `${state.spriteWidth} x ${state.spriteHeight}px per sprite`]
+    ],
+    paletteTab: [
+      ["Selected", selectedTileLabel()],
+      ["Palette size", `${state.tiles.length} tile${state.tiles.length === 1 ? "" : "s"}`]
+    ],
+    createTab: [
+      ["Tile A", helpTileName(state.create.tileAId)],
+      ["Tile B", helpTileName(state.create.tileBId, "Choose Tile B")],
+      ["Layer C", helpTileName(state.create.tileCId)],
+      ["Lines", `${lineSummary(state.create)}; ${state.create.betweenMode === "include" ? "include between lines" : "exclude between lines"}`],
+      ["Effects", `Feather ${state.create.feather}, splatter ${state.create.splatter}, noise ${state.create.noise}`]
+    ],
+    placeTab: [
+      ["Tool", state.tool],
+      ["Active layer", `${layer.name} (${layer.placements.size} placed)`],
+      ["Selected tile", selectedTileLabel()]
+    ],
+    cullTab: [
+      ["Layer", `${cullLayer().name}; cull ${cull.enabled ? "enabled" : "disabled"}`],
+      ["Lines", `${lineSummary(cull)}; ${cull.betweenMode === "include" ? "include between lines" : "exclude between lines"}`],
+      ["Effects", `Feather ${cull.feather}, splatter ${cull.splatter}, noise ${cull.noise}`]
+    ],
+    exportTab: [
+      ["Palette", `${state.tiles.length} imported tile${state.tiles.length === 1 ? "" : "s"}`],
+      ["Scene", `${placedTileCount()} placed tile${placedTileCount() === 1 ? "" : "s"} across ${state.layers.length} layer${state.layers.length === 1 ? "" : "s"}`],
+      ["Export sheet", `${state.exportCols} column${state.exportCols === 1 ? "" : "s"}`]
+    ]
+  };
+  return details[tabId] || [];
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderHelpDetails(details) {
+  els.contextHelpDetails.innerHTML = details
+    .map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+    .join("");
+}
+
+function controlBelongsToActivePanel(control) {
+  const tab = els.controlTabs.find((item) => item.id === activeControlTabId());
+  const panel = tab ? document.querySelector(`#${tab.getAttribute("aria-controls")}`) : null;
+  return Boolean(panel && control && panel.contains(control));
+}
+
+function updateContextHelp(controlId = lastHelpControlId) {
+  if (!els.contextHelp) return;
+  const tabId = activeControlTabId();
+  const control = controlId ? document.getElementById(controlId) : null;
+  const controlInfo = controlBelongsToActivePanel(control) ? controlHelp[controlId] : null;
+  const tabInfo = tabHelp[tabId] || tabHelp.projectTab;
+
+  lastHelpControlId = controlInfo ? controlId : null;
+  els.contextHelpTitle.textContent = controlInfo ? controlInfo[0] : tabInfo.title;
+  els.contextHelpBody.textContent = controlInfo ? controlInfo[1] : tabInfo.body;
+  renderHelpDetails(tabHelpDetails(tabId));
+}
+
+function handleContextHelpEvent(event) {
+  const target = event.target.closest?.("button, input, select, canvas");
+  if (!target?.id) return;
+  updateContextHelp(target.id);
+}
+
 function activateControlTab(tabId, focusTab = false) {
   const activeTab = els.controlTabs.find((tab) => tab.id === tabId);
   if (!activeTab) return;
@@ -251,6 +485,7 @@ function activateControlTab(tabId, focusTab = false) {
   }
 
   updateStats();
+  updateContextHelp();
   if (focusTab) activeTab.focus();
 }
 
@@ -3763,6 +3998,10 @@ els.zoomOut.addEventListener("click", () => stepViewerZoom(-1));
 els.zoomIn.addEventListener("click", () => stepViewerZoom(1));
 els.zoomReset.addEventListener("click", () => setViewerScale(1));
 window.addEventListener("resize", applyResponsiveViewerScale);
+document.addEventListener("focusin", handleContextHelpEvent);
+document.addEventListener("input", handleContextHelpEvent);
+document.addEventListener("change", handleContextHelpEvent);
+document.addEventListener("click", handleContextHelpEvent);
 els.gridCanvas.addEventListener("pointermove", handleGridPointerMove);
 els.gridCanvas.addEventListener("pointerleave", () => {
   state.hoverCell = null;
@@ -3830,6 +4069,7 @@ renderLayers();
 renderGrid();
 applyResponsiveViewerScale();
 updateStats();
+updateContextHelp();
 setStatus("Ready. Configure the project, then import sprites to build your palette.");
 
 window.__tileBuilderDebug = {

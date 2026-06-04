@@ -452,6 +452,23 @@ test("saves and reloads a complete project with settings, sprites, layers, and p
 test("organizes the workflow into separate project, import, palette, create, place, cull, and export screens", async ({ page }) => {
   await openApp(page);
 
+  const tabHelp = [
+    ["1. Project", "Project Setup", "choose tile mode"],
+    ["2. Import", "Import Sprites", "add individual PNGs"],
+    ["3. Palette", "Manage Palette", "preview, rename"],
+    ["4. Create", "Create Transitions", "draw editable cut lines"],
+    ["5. Place", "Place Sprites", "paint, move"],
+    ["6. Cull", "Cull Layers", "draw editable cut lines across a full placed layer"],
+    ["7. Export", "Export", "download the palette sprite sheet"]
+  ];
+  for (const [name, title, tooltip] of tabHelp) {
+    const tab = page.getByRole("tab", { name });
+    await expect(tab).toHaveAttribute("title", new RegExp(tooltip, "i"));
+    await tab.click();
+    await expect(page.locator("#contextHelpTitle")).toHaveText(title);
+  }
+  await selectControlTab(page, "1. Project");
+
   await expect(page.getByRole("tab", { name: "1. Project" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save Project" })).toBeVisible();
@@ -459,6 +476,11 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await expect(page.locator("#gridCanvas")).toBeHidden();
   await expect(page.locator("#placementPreviewEmpty")).toHaveText("Select a tile to preview.");
   await expect(page.locator("#placementPreviewName")).toHaveText("None selected.");
+  await expect(page.locator("#contextHelp")).toBeVisible();
+  await expect(page.locator("#contextHelpTitle")).toHaveText("Project Setup");
+  await page.locator("#tileMode").focus();
+  await expect(page.locator("#contextHelpTitle")).toHaveText("Tile Mode");
+  await expect(page.locator("#contextHelpBody")).toContainText("Choose the map projection");
   await selectControlTab(page, "2. Import");
   await expect(page.getByRole("button", { name: "Apply Settings" })).toBeHidden();
 
@@ -468,6 +490,9 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await selectControlTab(page, "4. Create");
   await expect(page.getByRole("button", { name: "Add Transition" })).toBeVisible();
   await expect(page.locator("#createCanvas")).toBeVisible();
+  await page.locator("#createVertexMode").focus();
+  await expect(page.locator("#contextHelpTitle")).toHaveText("Vertex Mode");
+  await expect(page.locator("#contextHelpBody")).toContainText("only manipulates existing vertices");
   await selectControlTab(page, "5. Place");
   await expect(page.locator(".tile-card", { hasText: "red.png" })).toBeVisible();
   await expect(page.locator("#placementPreview")).toHaveAttribute("alt", "red.png placement preview");
@@ -481,6 +506,9 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await expect(page.locator("#cullCanvas")).toBeVisible();
   await expect(page.locator("#cullLayerSelect")).toBeVisible();
   await expect(page.locator("#cullPreviewStatus")).toHaveText(/Layer 1: 1 placed tile/);
+  await page.locator("#cullBetweenMode").focus();
+  await expect(page.locator("#contextHelpTitle")).toHaveText("Between Lines");
+  await expect(page.locator("#contextHelpBody")).toContainText("multiple layer cull lines combine");
 
   await selectControlTab(page, "7. Export");
   await expect(page.getByRole("button", { name: "Export PNG" })).toBeVisible();
@@ -489,6 +517,7 @@ test("organizes the workflow into separate project, import, palette, create, pla
   await expect(page.locator("#gridCanvas")).toBeHidden();
   await expect(page.locator("#exportTileCount")).toHaveText("1");
   await expect(page.locator("#exportPlacedCount")).toHaveText("1");
+  await expect(page.locator("#contextHelpTitle")).toHaveText("Export");
 });
 
 test("creates a non-destructive transition tile with reloadable cut settings", async ({ page }) => {

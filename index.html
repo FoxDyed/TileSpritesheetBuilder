@@ -20,13 +20,13 @@
     <main class="app-shell">
       <nav class="workflow-nav" aria-label="Tile builder workflow">
         <div class="control-tabs" role="tablist" aria-label="Workflow screens">
-          <button id="projectTab" class="control-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="projectScreen">1. Project</button>
-          <button id="importTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="importScreen" tabindex="-1">2. Import</button>
-          <button id="paletteTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="paletteScreen" tabindex="-1">3. Palette</button>
-          <button id="createTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="createScreen" tabindex="-1">4. Create</button>
-          <button id="placeTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="placeScreen" tabindex="-1">5. Place</button>
-          <button id="cullTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="cullScreen" tabindex="-1">6. Cull</button>
-          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportScreen" tabindex="-1">7. Export</button>
+          <button id="projectTab" class="control-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="projectScreen" title="Project Setup: choose tile mode, grid size, cell dimensions, sprite dimensions, and save or load full project files.">1. Project</button>
+          <button id="importTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="importScreen" tabindex="-1" title="Import Sprites: add individual PNGs or slice a sprite sheet into reusable palette tiles.">2. Import</button>
+          <button id="paletteTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="paletteScreen" tabindex="-1" title="Manage Palette: preview, rename, clone, crop, transform, recolor, and clean up source tiles.">3. Palette</button>
+          <button id="createTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="createScreen" tabindex="-1" title="Create Transitions: draw editable cut lines between tiles or transparency and save the result as a new palette tile.">4. Create</button>
+          <button id="placeTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="placeScreen" tabindex="-1" title="Place Sprites: paint, move, erase, group move, and manage layers on the project grid.">5. Place</button>
+          <button id="cullTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="cullScreen" tabindex="-1" title="Cull Layers: draw editable cut lines across a full placed layer for larger terrain transitions.">6. Cull</button>
+          <button id="exportTab" class="control-tab" type="button" role="tab" aria-selected="false" aria-controls="exportScreen" tabindex="-1" title="Export: download the palette sprite sheet, full scene PNG, or active layer PNG.">7. Export</button>
         </div>
         <p id="projectStatus" class="status-text workflow-status" aria-live="polite"></p>
       </nav>
@@ -567,6 +567,13 @@
           </section>
         </div>
       </section>
+
+      <aside id="contextHelp" class="context-help" aria-live="polite" aria-label="Context help">
+        <p class="eyebrow">Context help</p>
+        <h2 id="contextHelpTitle">Project Setup</h2>
+        <p id="contextHelpBody">Choose the project shape first. These values control how the grid is drawn, how imported sprite sheets are sliced, and how exports are sized.</p>
+        <dl id="contextHelpDetails" class="help-details"></dl>
+      </aside>
     </main>
 
     <dialog id="cropDialog" class="crop-dialog">
