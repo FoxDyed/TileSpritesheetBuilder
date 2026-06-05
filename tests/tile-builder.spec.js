@@ -331,6 +331,24 @@ test("loads the static page and applies custom project settings", async ({ page 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
 });
 
+test("lays out project dimensions in requested rows", async ({ page }) => {
+  await openApp(page);
+  const rows = await page.evaluate(() => {
+    const ids = ["tileMode", "gridCols", "gridRows", "tileWidth", "tileHeight", "spriteWidth", "spriteHeight"];
+    return Object.fromEntries(ids.map((id) => {
+      const rect = document.querySelector(`#${id}`).closest("label").getBoundingClientRect();
+      return [id, Math.round(rect.top)];
+    }));
+  });
+
+  expect(rows.tileMode).toBe(rows.gridCols);
+  expect(rows.tileMode).toBe(rows.gridRows);
+  expect(rows.tileWidth).toBe(rows.tileHeight);
+  expect(rows.spriteWidth).toBe(rows.spriteHeight);
+  expect(rows.tileWidth).toBeGreaterThan(rows.tileMode);
+  expect(rows.spriteWidth).toBeGreaterThan(rows.tileWidth);
+});
+
 test("preserves palette tiles across settings changes and saves and reloads palettes", async ({ page }) => {
   await openApp(page);
   await setProject(page);
@@ -1293,6 +1311,72 @@ test("zooms create and cull preview canvases independently", async ({ page }) =>
   await page.locator("#cullZoomReset").click();
   await expect(page.locator("#cullZoomScale")).toHaveText("Scale: 100% (1:1)");
   await expect(page.locator("#createZoomScale")).toHaveText("Scale: 125%");
+});
+
+test("pans create and cull previews and updates display handles", async ({ page }) => {
+  await openApp(page);
+  await setProject(page, {
+    cols: 8,
+    rows: 8,
+    tileWidth: 128,
+    tileHeight: 64,
+    spriteWidth: 512,
+    spriteHeight: 512
+  });
+
+  await selectControlTab(page, "4. Create");
+  await page.locator("#createLineWidth").fill("9");
+  await page.locator("#createVertexRadius").fill("15");
+  await page.locator("#createZoomIn").click();
+  await page.locator("#createZoomIn").click();
+  await page.locator("#createPanCenter").click();
+  const createBeforePan = await page.locator("#createCanvasWrap").evaluate((wrap) => ({
+    left: wrap.scrollLeft,
+    top: wrap.scrollTop,
+    maxLeft: wrap.scrollWidth - wrap.clientWidth,
+    maxTop: wrap.scrollHeight - wrap.clientHeight
+  }));
+  expect(createBeforePan.maxLeft).toBeGreaterThan(0);
+  expect(createBeforePan.maxTop).toBeGreaterThan(0);
+  await page.locator("#createPanRight").click();
+  await page.locator("#createPanDown").click();
+  const createAfterPan = await page.locator("#createCanvasWrap").evaluate((wrap) => ({
+    left: wrap.scrollLeft,
+    top: wrap.scrollTop
+  }));
+  expect(createAfterPan.left).toBeGreaterThan(createBeforePan.left);
+  expect(createAfterPan.top).toBeGreaterThan(createBeforePan.top);
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().create)).toMatchObject({
+    lineWidth: 9,
+    vertexRadius: 15
+  });
+
+  await selectControlTab(page, "6. Cull");
+  await page.locator("#cullLineWidth").fill("10");
+  await page.locator("#cullVertexRadius").fill("18");
+  await page.locator("#cullZoomIn").click();
+  await page.locator("#cullZoomIn").click();
+  await page.locator("#cullPanCenter").click();
+  const cullBeforePan = await page.locator("#cullCanvasWrap").evaluate((wrap) => ({
+    left: wrap.scrollLeft,
+    top: wrap.scrollTop,
+    maxLeft: wrap.scrollWidth - wrap.clientWidth,
+    maxTop: wrap.scrollHeight - wrap.clientHeight
+  }));
+  expect(cullBeforePan.maxLeft).toBeGreaterThan(0);
+  expect(cullBeforePan.maxTop).toBeGreaterThan(0);
+  await page.locator("#cullPanRight").click();
+  await page.locator("#cullPanDown").click();
+  const cullAfterPan = await page.locator("#cullCanvasWrap").evaluate((wrap) => ({
+    left: wrap.scrollLeft,
+    top: wrap.scrollTop
+  }));
+  expect(cullAfterPan.left).toBeGreaterThan(cullBeforePan.left);
+  expect(cullAfterPan.top).toBeGreaterThan(cullBeforePan.top);
+  expect(await page.evaluate(() => window.__tileBuilderDebug.getState().layerPlacements[0].cull)).toMatchObject({
+    lineWidth: 10,
+    vertexRadius: 18
+  });
 });
 
 test("toggles dark mode and persists the display preference", async ({ page }) => {

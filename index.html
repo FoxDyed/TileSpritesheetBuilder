@@ -41,8 +41,8 @@
           <section class="feature-panel">
             <h3>Dimensions</h3>
             <p class="panel-description">These dimensions are shared with placement and export.</p>
-            <div class="field-grid">
-              <label>
+            <div class="field-grid project-dimension-grid">
+              <label class="dimension-field tile-mode-field">
                 Tile mode
                 <select id="tileMode">
                   <option value="isometric">Isometric diamond</option>
@@ -50,27 +50,27 @@
                   <option value="topdown">Top-down grid</option>
                 </select>
               </label>
-              <label>
+              <label class="dimension-field grid-cols-field">
                 Columns
                 <input id="gridCols" type="number" min="1" max="64" value="8">
               </label>
-              <label>
+              <label class="dimension-field grid-rows-field">
                 Rows
                 <input id="gridRows" type="number" min="1" max="64" value="8">
               </label>
-              <label>
+              <label class="dimension-field tile-width-field">
                 Cell width
                 <input id="tileWidth" type="number" min="8" max="1024" value="128">
               </label>
-              <label>
+              <label class="dimension-field tile-height-field">
                 Cell height
                 <input id="tileHeight" type="number" min="8" max="1024" value="64">
               </label>
-              <label>
+              <label class="dimension-field sprite-width-field">
                 Sprite width
                 <input id="spriteWidth" type="number" min="8" max="2048" value="128">
               </label>
-              <label>
+              <label class="dimension-field sprite-height-field">
                 Sprite height
                 <input id="spriteHeight" type="number" min="8" max="2048" value="128">
               </label>
@@ -305,6 +305,16 @@
                   </select>
                 </label>
               </div>
+              <div class="create-path-grid display-path-grid">
+                <label>
+                  Line width
+                  <input id="createLineWidth" type="number" min="1" max="16" value="3">
+                </label>
+                <label>
+                  Vertex size
+                  <input id="createVertexRadius" type="number" min="3" max="32" value="5">
+                </label>
+              </div>
               <label class="checkbox-field">
                 <input id="createSnapToGrid" type="checkbox">
                 Snap vertices to grid
@@ -336,14 +346,23 @@
           <section class="feature-panel create-preview-panel">
             <div class="preview-panel-heading">
               <h3>Cut Preview</h3>
-              <div class="zoom-controls" aria-label="Create preview zoom controls">
-                <button id="createZoomOut" class="zoom-button" type="button" aria-label="Zoom out create preview">-</button>
-                <span id="createZoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
-                <button id="createZoomIn" class="zoom-button" type="button" aria-label="Zoom in create preview">+</button>
-                <button id="createZoomReset" class="secondary-button compact-button" type="button">1:1</button>
+              <div class="preview-control-stack">
+                <div class="zoom-controls" aria-label="Create preview zoom controls">
+                  <button id="createZoomOut" class="zoom-button" type="button" aria-label="Zoom out create preview">-</button>
+                  <span id="createZoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
+                  <button id="createZoomIn" class="zoom-button" type="button" aria-label="Zoom in create preview">+</button>
+                  <button id="createZoomReset" class="secondary-button compact-button" type="button">1:1</button>
+                </div>
+                <div class="pan-controls" aria-label="Create preview pan controls">
+                  <button id="createPanLeft" class="secondary-button compact-button" type="button">Left</button>
+                  <button id="createPanUp" class="secondary-button compact-button" type="button">Up</button>
+                  <button id="createPanCenter" class="secondary-button compact-button" type="button">Center</button>
+                  <button id="createPanDown" class="secondary-button compact-button" type="button">Down</button>
+                  <button id="createPanRight" class="secondary-button compact-button" type="button">Right</button>
+                </div>
               </div>
             </div>
-            <div class="create-canvas-wrap">
+            <div id="createCanvasWrap" class="create-canvas-wrap">
               <canvas id="createCanvas" width="512" height="512" aria-label="Draw transition cut line"></canvas>
             </div>
             <p id="createPreviewStatus" class="status-text">Import at least one tile, then choose Tile B.</p>
@@ -505,6 +524,16 @@
                   </select>
                 </label>
               </div>
+              <div class="create-path-grid display-path-grid">
+                <label>
+                  Line width
+                  <input id="cullLineWidth" type="number" min="1" max="16" value="3">
+                </label>
+                <label>
+                  Vertex size
+                  <input id="cullVertexRadius" type="number" min="3" max="32" value="5">
+                </label>
+              </div>
               <label class="checkbox-field">
                 <input id="cullSnapToGrid" type="checkbox">
                 Snap vertices to grid
@@ -530,14 +559,23 @@
           <section class="feature-panel cull-preview-panel">
             <div class="preview-panel-heading">
               <h3>Layer Preview</h3>
-              <div class="zoom-controls" aria-label="Cull preview zoom controls">
-                <button id="cullZoomOut" class="zoom-button" type="button" aria-label="Zoom out cull preview">-</button>
-                <span id="cullZoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
-                <button id="cullZoomIn" class="zoom-button" type="button" aria-label="Zoom in cull preview">+</button>
-                <button id="cullZoomReset" class="secondary-button compact-button" type="button">1:1</button>
+              <div class="preview-control-stack">
+                <div class="zoom-controls" aria-label="Cull preview zoom controls">
+                  <button id="cullZoomOut" class="zoom-button" type="button" aria-label="Zoom out cull preview">-</button>
+                  <span id="cullZoomScale" class="zoom-scale">Scale: 100% (1:1)</span>
+                  <button id="cullZoomIn" class="zoom-button" type="button" aria-label="Zoom in cull preview">+</button>
+                  <button id="cullZoomReset" class="secondary-button compact-button" type="button">1:1</button>
+                </div>
+                <div class="pan-controls" aria-label="Cull preview pan controls">
+                  <button id="cullPanLeft" class="secondary-button compact-button" type="button">Left</button>
+                  <button id="cullPanUp" class="secondary-button compact-button" type="button">Up</button>
+                  <button id="cullPanCenter" class="secondary-button compact-button" type="button">Center</button>
+                  <button id="cullPanDown" class="secondary-button compact-button" type="button">Down</button>
+                  <button id="cullPanRight" class="secondary-button compact-button" type="button">Right</button>
+                </div>
               </div>
             </div>
-            <div class="cull-canvas-wrap">
+            <div id="cullCanvasWrap" class="cull-canvas-wrap">
               <canvas id="cullCanvas" width="900" height="620" aria-label="Draw layer cull line"></canvas>
             </div>
             <p id="cullPreviewStatus" class="status-text">Select a layer with placed tiles to draw a cull path.</p>

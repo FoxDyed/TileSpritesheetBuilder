@@ -31,6 +31,8 @@ const state = {
         snapToGrid: false,
         vertexMode: false,
         lineMode: "smooth",
+        lineWidth: 3,
+        vertexRadius: 5,
         feather: 0,
         splatter: 0,
         noise: 0,
@@ -64,6 +66,8 @@ const state = {
     snapToGrid: false,
     vertexMode: false,
     lineMode: "smooth",
+    lineWidth: 3,
+    vertexRadius: 5,
     activeVertexIndex: -1,
     draggingVertex: false,
     feather: 6,
@@ -133,6 +137,8 @@ const els = {
   createLineSelect: document.querySelector("#createLineSelect"),
   createGridDivisions: document.querySelector("#createGridDivisions"),
   createLineMode: document.querySelector("#createLineMode"),
+  createLineWidth: document.querySelector("#createLineWidth"),
+  createVertexRadius: document.querySelector("#createVertexRadius"),
   createSnapToGrid: document.querySelector("#createSnapToGrid"),
   createVertexMode: document.querySelector("#createVertexMode"),
   addCreateLine: document.querySelector("#addCreateLine"),
@@ -143,10 +149,16 @@ const els = {
   loadCreatedTile: document.querySelector("#loadCreatedTile"),
   addCreatedTile: document.querySelector("#addCreatedTile"),
   createCanvas: document.querySelector("#createCanvas"),
+  createCanvasWrap: document.querySelector("#createCanvasWrap"),
   createZoomOut: document.querySelector("#createZoomOut"),
   createZoomIn: document.querySelector("#createZoomIn"),
   createZoomReset: document.querySelector("#createZoomReset"),
   createZoomScale: document.querySelector("#createZoomScale"),
+  createPanLeft: document.querySelector("#createPanLeft"),
+  createPanRight: document.querySelector("#createPanRight"),
+  createPanUp: document.querySelector("#createPanUp"),
+  createPanDown: document.querySelector("#createPanDown"),
+  createPanCenter: document.querySelector("#createPanCenter"),
   createPreviewStatus: document.querySelector("#createPreviewStatus"),
   cullLayerSelect: document.querySelector("#cullLayerSelect"),
   cullEnabled: document.querySelector("#cullEnabled"),
@@ -157,6 +169,8 @@ const els = {
   cullLineSelect: document.querySelector("#cullLineSelect"),
   cullGridDivisions: document.querySelector("#cullGridDivisions"),
   cullLineMode: document.querySelector("#cullLineMode"),
+  cullLineWidth: document.querySelector("#cullLineWidth"),
+  cullVertexRadius: document.querySelector("#cullVertexRadius"),
   cullSnapToGrid: document.querySelector("#cullSnapToGrid"),
   cullVertexMode: document.querySelector("#cullVertexMode"),
   cullFeather: document.querySelector("#cullFeather"),
@@ -168,10 +182,16 @@ const els = {
   cullPatternFileInput: document.querySelector("#cullPatternFileInput"),
   clearCullLine: document.querySelector("#clearCullLine"),
   cullCanvas: document.querySelector("#cullCanvas"),
+  cullCanvasWrap: document.querySelector("#cullCanvasWrap"),
   cullZoomOut: document.querySelector("#cullZoomOut"),
   cullZoomIn: document.querySelector("#cullZoomIn"),
   cullZoomReset: document.querySelector("#cullZoomReset"),
   cullZoomScale: document.querySelector("#cullZoomScale"),
+  cullPanLeft: document.querySelector("#cullPanLeft"),
+  cullPanRight: document.querySelector("#cullPanRight"),
+  cullPanUp: document.querySelector("#cullPanUp"),
+  cullPanDown: document.querySelector("#cullPanDown"),
+  cullPanCenter: document.querySelector("#cullPanCenter"),
   cullPreviewStatus: document.querySelector("#cullPreviewStatus"),
   paintTool: document.querySelector("#paintTool"),
   dropTool: document.querySelector("#dropTool"),
@@ -244,6 +264,14 @@ function clampNumber(value, min, max, fallback) {
   const number = Number.parseInt(value, 10);
   if (Number.isNaN(number)) return fallback;
   return Math.min(max, Math.max(min, number));
+}
+
+function displayLineWidth(editor) {
+  return clampNumber(editor.lineWidth, 1, 16, 3);
+}
+
+function displayVertexRadius(editor) {
+  return clampNumber(editor.vertexRadius, 3, 32, 5);
 }
 
 function updateExportColumns() {
@@ -330,6 +358,8 @@ const controlHelp = {
   createVertexCount: ["Vertices", "Changes how many editable points the active line has. More vertices allow a more custom shape; fewer vertices are easier to manage."],
   createGridDivisions: ["Subgrid", "Sets the number of snap divisions drawn over the tile. More divisions give finer vertex placement."],
   createLineMode: ["Segment Mode", "Tangent mode draws smoother curved segments through the vertices. Straight mode connects vertices with hard line segments for precise cuts."],
+  createLineWidth: ["Line Width", "Controls how thick Create cut lines are drawn in the preview. Increase it when zoomed out or when a line needs to stand out from detailed tile art."],
+  createVertexRadius: ["Vertex Size", "Controls the size of the editable vertex circles in the Create preview. Larger vertices are easier to grab when fine tuning complex paths."],
   createSnapToGrid: ["Snap Vertices To Grid", "Snaps moved vertices to the subgrid. This is helpful when matching edges across related transition tiles."],
   createVertexMode: ["Vertex Mode", "When enabled, touching the preview only manipulates existing vertices. Turn it off when you want to draw a new custom line shape."],
   addCreateLine: ["Add Line", "Adds another editable cut line to the transition. Multiple lines can define bands, channels, borders, and more complex masks."],
@@ -343,6 +373,11 @@ const controlHelp = {
   createZoomOut: ["Create Preview Zoom Out", "Zooms the Create preview out so the whole tile is easier to see while editing cut lines."],
   createZoomIn: ["Create Preview Zoom In", "Zooms the Create preview in for more precise vertex and edge work."],
   createZoomReset: ["Create Preview Reset Zoom", "Returns the Create preview to 1:1 scale."],
+  createPanLeft: ["Pan Create Left", "Moves the Create preview viewport left without changing the cut line or tile data."],
+  createPanRight: ["Pan Create Right", "Moves the Create preview viewport right so off-center cut details can be brought into view."],
+  createPanUp: ["Pan Create Up", "Moves the Create preview viewport upward, useful when zoomed in on a tall sprite or upper transition edge."],
+  createPanDown: ["Pan Create Down", "Moves the Create preview viewport downward, useful when zoomed in on lower vertices or bottom-edge cuts."],
+  createPanCenter: ["Center Create Preview", "Centers the Create preview inside its viewport. Use this after zooming or panning away from the active work area."],
   paintTool: ["Paint Tool", "Places the selected palette tile onto clicked grid cells on the active layer."],
   dropTool: ["Move Tool", "Picks up an existing placement and drops it somewhere else on the active layer."],
   eraseTool: ["Erase Tool", "Removes placements from clicked cells on the active layer."],
@@ -373,6 +408,8 @@ const controlHelp = {
   cullVertexCount: ["Cull Vertices", "Changes how many editable points the active cull line has."],
   cullGridDivisions: ["Cull Subgrid", "Sets the subgrid divisions across the full visible placement grid. In isometric projects the subgrid follows the isometric grid."],
   cullLineMode: ["Cull Segment Mode", "Tangent mode makes smoother terrain boundaries; Straight mode makes precise angular cuts."],
+  cullLineWidth: ["Cull Line Width", "Controls how thick cull lines are drawn across the layer preview. Increase it when editing a large grid or when tile art makes lines hard to see."],
+  cullVertexRadius: ["Cull Vertex Size", "Controls the size of editable vertex circles in the Cull preview. Larger handles are easier to grab while working on a zoomed-out terrain grid."],
   cullSnapToGrid: ["Snap Cull Vertices", "Snaps moved cull vertices to the layer subgrid so cuts align cleanly across the tile grid."],
   cullVertexMode: ["Cull Vertex Mode", "When enabled, touching the cull preview only moves existing vertices instead of starting a new line."],
   addCullLine: ["Add Cull Line", "Adds another editable cull line to the selected layer."],
@@ -384,6 +421,11 @@ const controlHelp = {
   cullZoomOut: ["Cull Preview Zoom Out", "Zooms the Cull preview out so more of the full grid is visible."],
   cullZoomIn: ["Cull Preview Zoom In", "Zooms the Cull preview in for more precise layer cut editing."],
   cullZoomReset: ["Cull Preview Reset Zoom", "Returns the Cull preview to 1:1 scale."],
+  cullPanLeft: ["Pan Cull Left", "Moves the Cull preview viewport left without changing layer placements or cull lines."],
+  cullPanRight: ["Pan Cull Right", "Moves the Cull preview viewport right so off-center terrain cuts can be brought into view."],
+  cullPanUp: ["Pan Cull Up", "Moves the Cull preview viewport upward while preserving the current zoom."],
+  cullPanDown: ["Pan Cull Down", "Moves the Cull preview viewport downward while preserving the current zoom."],
+  cullPanCenter: ["Center Cull Preview", "Centers the Cull preview inside its viewport. Use this after zooming into a large grid."],
   exportCols: ["Sprite Sheet Columns", "Sets how many palette sprites appear in each row of the exported sprite sheet."],
   exportButton: ["Export PNG", "Downloads a packed palette sprite sheet using the current column count."],
   exportMapButton: ["Export Full Scene PNG", "Downloads the visible placed layers as one rendered scene PNG."],
@@ -1019,6 +1061,8 @@ function deserializeTransitionRecipe(recipe) {
     snapToGrid: recipe.snapToGrid === true,
     vertexMode: recipe.vertexMode === true,
     lineMode: recipe.lineMode === "straight" ? "straight" : "smooth",
+    lineWidth: clampNumber(recipe.lineWidth, 1, 16, 3),
+    vertexRadius: clampNumber(recipe.vertexRadius, 3, 32, 5),
     feather: clampNumber(recipe.feather, 0, 64, 6),
     splatter: clampNumber(recipe.splatter, 0, 100, 18),
     noise: clampNumber(recipe.noise, 0, 100, 8)
@@ -1094,6 +1138,8 @@ function syncCreateControlsFromState() {
   els.createVertexCount.value = state.create.vertexCount;
   els.createGridDivisions.value = state.create.gridDivisions;
   els.createLineMode.value = state.create.lineMode;
+  els.createLineWidth.value = displayLineWidth(state.create);
+  els.createVertexRadius.value = displayVertexRadius(state.create);
   els.createSnapToGrid.checked = state.create.snapToGrid;
   els.createVertexMode.checked = state.create.vertexMode;
   els.createSideUpper.classList.toggle("is-active", state.create.side === "negative");
@@ -1461,7 +1507,7 @@ function drawCreateSubgrid(width, height) {
 }
 
 function drawCreateVertices(points) {
-  const radius = Math.max(5, Math.ceil(Math.max(previewLogicalWidth(els.createCanvas), previewLogicalHeight(els.createCanvas)) / 48));
+  const radius = displayVertexRadius(state.create);
   createCtx.save();
   points.forEach((point, index) => {
     const active = index === state.create.activeVertexIndex;
@@ -1469,7 +1515,7 @@ function drawCreateVertices(points) {
     createCtx.arc(point.x, point.y, active ? radius + 2 : radius, 0, Math.PI * 2);
     createCtx.fillStyle = active ? cssVar("--accent-strong") : cssVar("--panel");
     createCtx.strokeStyle = cssVar("--accent-strong");
-    createCtx.lineWidth = active ? 3 : 2;
+    createCtx.lineWidth = active ? Math.max(2, Math.ceil(radius / 3)) : Math.max(1, Math.ceil(radius / 4));
     createCtx.fill();
     createCtx.stroke();
   });
@@ -1701,7 +1747,7 @@ function drawCreatePreview() {
     createCtx.save();
     const active = index === state.create.activeLineIndex;
     createCtx.strokeStyle = editorLineColor(index, active);
-    createCtx.lineWidth = active ? Math.max(3, Math.ceil(Math.max(width, height) / 96)) : 2;
+    createCtx.lineWidth = active ? displayLineWidth(state.create) : Math.max(1, displayLineWidth(state.create) - 1);
     createCtx.setLineDash([8, 5]);
     createCtx.beginPath();
     traceCreatePath(createCtx, simplifyStrokePoints(line), state.create.lineMode);
@@ -1733,6 +1779,8 @@ function readCreateEffectControls() {
   state.create.noise = clampNumber(els.createNoise.value, 0, 100, state.create.noise);
   state.create.gridDivisions = clampNumber(els.createGridDivisions.value, 2, 32, state.create.gridDivisions);
   state.create.lineMode = els.createLineMode.value === "straight" ? "straight" : "smooth";
+  state.create.lineWidth = clampNumber(els.createLineWidth.value, 1, 16, displayLineWidth(state.create));
+  state.create.vertexRadius = clampNumber(els.createVertexRadius.value, 3, 32, displayVertexRadius(state.create));
   state.create.snapToGrid = els.createSnapToGrid.checked;
   state.create.vertexMode = els.createVertexMode.checked;
   drawCreatePreview();
@@ -1767,6 +1815,8 @@ function transitionRecipeForCurrentTile() {
     snapToGrid: state.create.snapToGrid,
     vertexMode: state.create.vertexMode,
     lineMode: state.create.lineMode,
+    lineWidth: displayLineWidth(state.create),
+    vertexRadius: displayVertexRadius(state.create),
     feather: state.create.feather,
     splatter: state.create.splatter,
     noise: state.create.noise
@@ -1864,6 +1914,8 @@ function loadSelectedTransitionRecipe() {
     snapToGrid: restored.snapToGrid,
     vertexMode: restored.vertexMode,
     lineMode: restored.lineMode,
+    lineWidth: restored.lineWidth,
+    vertexRadius: restored.vertexRadius,
     feather: restored.feather,
     splatter: restored.splatter,
     noise: restored.noise
@@ -1886,6 +1938,8 @@ function defaultCullState() {
     snapToGrid: false,
     vertexMode: false,
     lineMode: "smooth",
+    lineWidth: 3,
+    vertexRadius: 5,
     feather: 0,
     splatter: 0,
     noise: 0,
@@ -1918,6 +1972,8 @@ function normalizeCull(cull) {
     snapToGrid: cull.snapToGrid === true,
     vertexMode: cull.vertexMode === true,
     lineMode: cull.lineMode === "straight" ? "straight" : "smooth",
+    lineWidth: clampNumber(cull.lineWidth, 1, 16, 3),
+    vertexRadius: clampNumber(cull.vertexRadius, 3, 32, 5),
     feather: clampNumber(cull.feather, 0, 96, 0),
     splatter: clampNumber(cull.splatter, 0, 100, 0),
     noise: clampNumber(cull.noise, 0, 100, 0),
@@ -2039,6 +2095,8 @@ function syncCullControlsFromState() {
   els.cullVertexCount.value = cull.vertexCount;
   els.cullGridDivisions.value = cull.gridDivisions;
   els.cullLineMode.value = cull.lineMode;
+  els.cullLineWidth.value = displayLineWidth(cull);
+  els.cullVertexRadius.value = displayVertexRadius(cull);
   els.cullSnapToGrid.checked = cull.snapToGrid;
   els.cullVertexMode.checked = cull.vertexMode;
   els.cullFeather.value = cull.feather;
@@ -2095,7 +2153,7 @@ function drawCullSubgrid(width, height, cull) {
 }
 
 function drawCullVertices(points, cull) {
-  const radius = Math.max(5, Math.ceil(Math.max(previewLogicalWidth(els.cullCanvas), previewLogicalHeight(els.cullCanvas)) / 90));
+  const radius = displayVertexRadius(cull);
   cullCtx.save();
   points.forEach((point, index) => {
     const active = index === cull.activeVertexIndex;
@@ -2103,7 +2161,7 @@ function drawCullVertices(points, cull) {
     cullCtx.arc(point.x, point.y, active ? radius + 2 : radius, 0, Math.PI * 2);
     cullCtx.fillStyle = active ? cssVar("--accent-strong") : cssVar("--panel");
     cullCtx.strokeStyle = cssVar("--accent-strong");
-    cullCtx.lineWidth = active ? 3 : 2;
+    cullCtx.lineWidth = active ? Math.max(2, Math.ceil(radius / 3)) : Math.max(1, Math.ceil(radius / 4));
     cullCtx.fill();
     cullCtx.stroke();
   });
@@ -2148,7 +2206,7 @@ function drawCullPreview() {
     cullCtx.save();
     const active = index === cull.activeLineIndex;
     cullCtx.strokeStyle = editorLineColor(index, active);
-    cullCtx.lineWidth = active ? Math.max(3, Math.ceil(Math.max(width, height) / 360)) : 2;
+    cullCtx.lineWidth = active ? displayLineWidth(cull) : Math.max(1, displayLineWidth(cull) - 1);
     cullCtx.setLineDash([10, 6]);
     cullCtx.beginPath();
     traceCreatePath(cullCtx, simplifyStrokePoints(line), cull.lineMode);
@@ -2338,6 +2396,7 @@ function previewZoomConfig(kind) {
     ? {
         stateKey: "cullPreviewScale",
         canvas: els.cullCanvas,
+        wrap: els.cullCanvasWrap,
         out: els.cullZoomOut,
         in: els.cullZoomIn,
         reset: els.cullZoomReset,
@@ -2346,11 +2405,25 @@ function previewZoomConfig(kind) {
     : {
         stateKey: "createPreviewScale",
         canvas: els.createCanvas,
+        wrap: els.createCanvasWrap,
         out: els.createZoomOut,
         in: els.createZoomIn,
         reset: els.createZoomReset,
         label: els.createZoomScale
       };
+}
+
+function panPreview(kind, directionX, directionY) {
+  const { wrap } = previewZoomConfig(kind);
+  const step = Math.max(48, Math.round(Math.min(wrap.clientWidth, wrap.clientHeight) * 0.25));
+  wrap.scrollLeft += directionX * step;
+  wrap.scrollTop += directionY * step;
+}
+
+function centerPreview(kind) {
+  const { wrap } = previewZoomConfig(kind);
+  wrap.scrollLeft = Math.max(0, Math.round((wrap.scrollWidth - wrap.clientWidth) / 2));
+  wrap.scrollTop = Math.max(0, Math.round((wrap.scrollHeight - wrap.clientHeight) / 2));
 }
 
 function previewLogicalWidth(canvas) {
@@ -2648,6 +2721,8 @@ function saveProject() {
         snapToGrid: layer.cull.snapToGrid,
         vertexMode: layer.cull.vertexMode,
         lineMode: layer.cull.lineMode,
+        lineWidth: displayLineWidth(layer.cull),
+        vertexRadius: displayVertexRadius(layer.cull),
         feather: layer.cull.feather,
         splatter: layer.cull.splatter,
         noise: layer.cull.noise
@@ -2676,6 +2751,8 @@ function linePatternFromEditor(editor, target) {
     snapToGrid: editor.snapToGrid === true,
     vertexMode: editor.vertexMode === true,
     lineMode: editor.lineMode === "straight" ? "straight" : "smooth",
+    lineWidth: displayLineWidth(editor),
+    vertexRadius: displayVertexRadius(editor),
     feather: editor.feather,
     splatter: editor.splatter || 0,
     noise: editor.noise || 0
@@ -2702,6 +2779,8 @@ function normalizeLinePattern(pattern, expectedTarget) {
     snapToGrid: pattern.snapToGrid === true,
     vertexMode: pattern.vertexMode === true,
     lineMode: pattern.lineMode === "straight" ? "straight" : "smooth",
+    lineWidth: clampNumber(pattern.lineWidth, 1, 16, 3),
+    vertexRadius: clampNumber(pattern.vertexRadius, 3, 32, 5),
     feather: clampNumber(pattern.feather, 0, expectedTarget === "cull" ? 96 : 64, expectedTarget === "cull" ? 0 : 6),
     splatter: clampNumber(pattern.splatter, 0, 100, expectedTarget === "cull" ? 0 : 18),
     noise: clampNumber(pattern.noise, 0, 100, expectedTarget === "cull" ? 0 : 8)
@@ -3855,7 +3934,7 @@ function nearestCreateVertex(point) {
   const width = previewLogicalWidth(els.createCanvas);
   const height = previewLogicalHeight(els.createCanvas);
   const points = activeCreateLinePixels(width, height);
-  const radius = Math.max(12, Math.ceil(Math.max(width, height) / 20));
+  const radius = Math.max(12, displayVertexRadius(state.create) + 4);
   let closest = { index: -1, distance: Infinity };
   points.forEach((vertex, index) => {
     const distance = Math.hypot(point.x - vertex.x, point.y - vertex.y);
@@ -3880,9 +3959,13 @@ function updateCreatePathControls() {
   const previousSnap = state.create.snapToGrid;
   state.create.gridDivisions = clampNumber(els.createGridDivisions.value, 2, 32, state.create.gridDivisions);
   state.create.lineMode = els.createLineMode.value === "straight" ? "straight" : "smooth";
+  state.create.lineWidth = clampNumber(els.createLineWidth.value, 1, 16, displayLineWidth(state.create));
+  state.create.vertexRadius = clampNumber(els.createVertexRadius.value, 3, 32, displayVertexRadius(state.create));
   state.create.snapToGrid = els.createSnapToGrid.checked;
   state.create.vertexMode = els.createVertexMode.checked;
   els.createGridDivisions.value = state.create.gridDivisions;
+  els.createLineWidth.value = state.create.lineWidth;
+  els.createVertexRadius.value = state.create.vertexRadius;
   if (state.create.snapToGrid && (!previousSnap || state.create.points.length > 0)) {
     const width = previewLogicalWidth(els.createCanvas);
     const height = previewLogicalHeight(els.createCanvas);
@@ -3971,7 +4054,7 @@ function nearestCullVertex(point, cull) {
   const width = previewLogicalWidth(els.cullCanvas);
   const height = previewLogicalHeight(els.cullCanvas);
   const points = activeCullLinePixels(cull, width, height);
-  const radius = Math.max(14, Math.ceil(Math.max(width, height) / 45));
+  const radius = Math.max(14, displayVertexRadius(cull) + 4);
   let closest = { index: -1, distance: Infinity };
   points.forEach((vertex, index) => {
     const distance = Math.hypot(point.x - vertex.x, point.y - vertex.y);
@@ -4101,12 +4184,16 @@ function updateCullControls() {
   cull.betweenMode = els.cullBetweenMode.value === "include" ? "include" : "exclude";
   cull.gridDivisions = clampNumber(els.cullGridDivisions.value, 2, 32, cull.gridDivisions);
   cull.lineMode = els.cullLineMode.value === "straight" ? "straight" : "smooth";
+  cull.lineWidth = clampNumber(els.cullLineWidth.value, 1, 16, displayLineWidth(cull));
+  cull.vertexRadius = clampNumber(els.cullVertexRadius.value, 3, 32, displayVertexRadius(cull));
   cull.snapToGrid = els.cullSnapToGrid.checked;
   cull.vertexMode = els.cullVertexMode.checked;
   cull.feather = clampNumber(els.cullFeather.value, 0, 96, cull.feather);
   cull.splatter = clampNumber(els.cullSplatter.value, 0, 100, cull.splatter);
   cull.noise = clampNumber(els.cullNoise.value, 0, 100, cull.noise);
   els.cullGridDivisions.value = cull.gridDivisions;
+  els.cullLineWidth.value = cull.lineWidth;
+  els.cullVertexRadius.value = cull.vertexRadius;
   els.cullFeather.value = cull.feather;
   els.cullSplatter.value = cull.splatter;
   els.cullNoise.value = cull.noise;
@@ -4218,6 +4305,8 @@ els.createLineSelect.addEventListener("change", () => setCreateLine(Number.parse
 els.createVertexCount.addEventListener("input", setCreateVertexCount);
 els.createGridDivisions.addEventListener("input", updateCreatePathControls);
 els.createLineMode.addEventListener("change", updateCreatePathControls);
+els.createLineWidth.addEventListener("input", updateCreatePathControls);
+els.createVertexRadius.addEventListener("input", updateCreatePathControls);
 els.createSnapToGrid.addEventListener("change", updateCreatePathControls);
 els.createVertexMode.addEventListener("change", updateCreatePathControls);
 els.createSideUpper.addEventListener("click", () => setCreateSide("negative"));
@@ -4241,6 +4330,8 @@ els.cullLineSelect.addEventListener("change", () => setCullLine(Number.parseInt(
 els.cullVertexCount.addEventListener("input", setCullVertexCount);
 els.cullGridDivisions.addEventListener("input", updateCullControls);
 els.cullLineMode.addEventListener("change", updateCullControls);
+els.cullLineWidth.addEventListener("input", updateCullControls);
+els.cullVertexRadius.addEventListener("input", updateCullControls);
 els.cullSnapToGrid.addEventListener("change", updateCullControls);
 els.cullVertexMode.addEventListener("change", updateCullControls);
 els.cullFeather.addEventListener("input", updateCullControls);
@@ -4270,9 +4361,19 @@ els.zoomReset.addEventListener("click", () => setViewerScale(1));
 els.createZoomOut.addEventListener("click", () => stepPreviewZoom("create", -1));
 els.createZoomIn.addEventListener("click", () => stepPreviewZoom("create", 1));
 els.createZoomReset.addEventListener("click", () => setPreviewScale("create", 1));
+els.createPanLeft.addEventListener("click", () => panPreview("create", -1, 0));
+els.createPanRight.addEventListener("click", () => panPreview("create", 1, 0));
+els.createPanUp.addEventListener("click", () => panPreview("create", 0, -1));
+els.createPanDown.addEventListener("click", () => panPreview("create", 0, 1));
+els.createPanCenter.addEventListener("click", () => centerPreview("create"));
 els.cullZoomOut.addEventListener("click", () => stepPreviewZoom("cull", -1));
 els.cullZoomIn.addEventListener("click", () => stepPreviewZoom("cull", 1));
 els.cullZoomReset.addEventListener("click", () => setPreviewScale("cull", 1));
+els.cullPanLeft.addEventListener("click", () => panPreview("cull", -1, 0));
+els.cullPanRight.addEventListener("click", () => panPreview("cull", 1, 0));
+els.cullPanUp.addEventListener("click", () => panPreview("cull", 0, -1));
+els.cullPanDown.addEventListener("click", () => panPreview("cull", 0, 1));
+els.cullPanCenter.addEventListener("click", () => centerPreview("cull"));
 window.addEventListener("resize", applyResponsiveViewerScale);
 document.addEventListener("focusin", handleContextHelpEvent);
 document.addEventListener("input", handleContextHelpEvent);
@@ -4386,6 +4487,8 @@ window.__tileBuilderDebug = {
           snapToGrid: layer.cull.snapToGrid,
           vertexMode: layer.cull.vertexMode,
           lineMode: layer.cull.lineMode,
+          lineWidth: layer.cull.lineWidth,
+          vertexRadius: layer.cull.vertexRadius,
           feather: layer.cull.feather,
           splatter: layer.cull.splatter,
           noise: layer.cull.noise
@@ -4411,6 +4514,8 @@ window.__tileBuilderDebug = {
         snapToGrid: state.create.snapToGrid,
         vertexMode: state.create.vertexMode,
         lineMode: state.create.lineMode,
+        lineWidth: state.create.lineWidth,
+        vertexRadius: state.create.vertexRadius,
         activeVertexIndex: state.create.activeVertexIndex,
         feather: state.create.feather,
         splatter: state.create.splatter,
