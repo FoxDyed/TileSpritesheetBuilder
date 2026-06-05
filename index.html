@@ -41,39 +41,52 @@
           <section class="feature-panel">
             <h3>Dimensions</h3>
             <p class="panel-description">These dimensions are shared with placement and export.</p>
-            <div class="field-grid project-dimension-grid">
-              <label class="dimension-field tile-mode-field">
-                Tile mode
-                <select id="tileMode">
-                  <option value="isometric">Isometric diamond</option>
-                  <option value="orthographic">Orthographic grid</option>
-                  <option value="topdown">Top-down grid</option>
-                </select>
-              </label>
-              <label class="dimension-field grid-cols-field">
-                Columns
-                <input id="gridCols" type="number" min="1" max="64" value="8">
-              </label>
-              <label class="dimension-field grid-rows-field">
-                Rows
-                <input id="gridRows" type="number" min="1" max="64" value="8">
-              </label>
-              <label class="dimension-field tile-width-field">
-                Cell width
-                <input id="tileWidth" type="number" min="8" max="1024" value="128">
-              </label>
-              <label class="dimension-field tile-height-field">
-                Cell height
-                <input id="tileHeight" type="number" min="8" max="1024" value="64">
-              </label>
-              <label class="dimension-field sprite-width-field">
-                Sprite width
-                <input id="spriteWidth" type="number" min="8" max="2048" value="128">
-              </label>
-              <label class="dimension-field sprite-height-field">
-                Sprite height
-                <input id="spriteHeight" type="number" min="8" max="2048" value="128">
-              </label>
+            <div class="project-dimension-grid">
+              <fieldset class="project-setting-group">
+                <legend>Tile type</legend>
+                <label>
+                  Tile mode
+                  <select id="tileMode">
+                    <option value="isometric">Isometric diamond</option>
+                    <option value="orthographic">Orthographic grid</option>
+                    <option value="topdown">Top-down grid</option>
+                  </select>
+                </label>
+              </fieldset>
+              <fieldset class="project-setting-group">
+                <legend>Grid controls</legend>
+                <div class="dimension-control-grid">
+                  <label>
+                    Columns
+                    <input id="gridCols" type="number" min="1" max="64" value="8">
+                  </label>
+                  <label>
+                    Rows
+                    <input id="gridRows" type="number" min="1" max="64" value="8">
+                  </label>
+                  <label>
+                    Cell width
+                    <input id="tileWidth" type="number" min="8" max="1024" value="128">
+                  </label>
+                  <label>
+                    Cell height
+                    <input id="tileHeight" type="number" min="8" max="1024" value="64">
+                  </label>
+                </div>
+              </fieldset>
+              <fieldset class="project-setting-group">
+                <legend>Sprite controls</legend>
+                <div class="dimension-control-grid">
+                  <label>
+                    Sprite width
+                    <input id="spriteWidth" type="number" min="8" max="2048" value="128">
+                  </label>
+                  <label>
+                    Sprite height
+                    <input id="spriteHeight" type="number" min="8" max="2048" value="128">
+                  </label>
+                </div>
+              </fieldset>
             </div>
             <button id="applySettings" class="secondary-button" type="button">Apply Settings</button>
           </section>

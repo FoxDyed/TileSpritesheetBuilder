@@ -341,39 +341,32 @@ input {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.project-dimension-grid .tile-mode-field {
-  grid-column: 1;
-  grid-row: 1;
+.project-dimension-grid {
+  display: grid;
+  gap: 12px;
 }
 
-.project-dimension-grid .grid-cols-field {
-  grid-column: 2;
-  grid-row: 1;
+.project-setting-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
-.project-dimension-grid .grid-rows-field {
-  grid-column: 3;
-  grid-row: 1;
+.project-setting-group legend {
+  padding: 0 6px;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
-.project-dimension-grid .tile-width-field {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.project-dimension-grid .tile-height-field {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.project-dimension-grid .sprite-width-field {
-  grid-column: 1;
-  grid-row: 3;
-}
-
-.project-dimension-grid .sprite-height-field {
-  grid-column: 2;
-  grid-row: 3;
+.dimension-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 label {
@@ -1230,15 +1223,6 @@ button:disabled {
     grid-template-columns: 1fr 1fr;
   }
 
-  .project-dimension-grid .dimension-field {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
-  .project-dimension-grid .tile-mode-field {
-    grid-column: 1 / -1;
-  }
-
   .create-canvas-wrap,
   .cull-canvas-wrap {
     height: 360px;
@@ -1577,9 +1561,8 @@ button:disabled {
     gap: 6px;
   }
 
-  .project-dimension-grid .dimension-field {
-    grid-column: auto;
-    grid-row: auto;
+  .dimension-control-grid {
+    gap: 6px;
   }
 
   label {

@@ -331,22 +331,20 @@ test("loads the static page and applies custom project settings", async ({ page 
   await expect(page.locator("#gridCanvas")).toHaveJSProperty("height", 208);
 });
 
-test("lays out project dimensions in requested rows", async ({ page }) => {
+test("groups project settings by tile type, grid controls, and sprite controls", async ({ page }) => {
   await openApp(page);
-  const rows = await page.evaluate(() => {
-    const ids = ["tileMode", "gridCols", "gridRows", "tileWidth", "tileHeight", "spriteWidth", "spriteHeight"];
-    return Object.fromEntries(ids.map((id) => {
-      const rect = document.querySelector(`#${id}`).closest("label").getBoundingClientRect();
-      return [id, Math.round(rect.top)];
+  const groups = await page.evaluate(() => {
+    return [...document.querySelectorAll(".project-setting-group")].map((group) => ({
+      legend: group.querySelector("legend").textContent.trim(),
+      controls: [...group.querySelectorAll("input, select")].map((control) => control.id)
     }));
   });
 
-  expect(rows.tileMode).toBe(rows.gridCols);
-  expect(rows.tileMode).toBe(rows.gridRows);
-  expect(rows.tileWidth).toBe(rows.tileHeight);
-  expect(rows.spriteWidth).toBe(rows.spriteHeight);
-  expect(rows.tileWidth).toBeGreaterThan(rows.tileMode);
-  expect(rows.spriteWidth).toBeGreaterThan(rows.tileWidth);
+  expect(groups).toEqual([
+    { legend: "Tile type", controls: ["tileMode"] },
+    { legend: "Grid controls", controls: ["gridCols", "gridRows", "tileWidth", "tileHeight"] },
+    { legend: "Sprite controls", controls: ["spriteWidth", "spriteHeight"] }
+  ]);
 });
 
 test("preserves palette tiles across settings changes and saves and reloads palettes", async ({ page }) => {
