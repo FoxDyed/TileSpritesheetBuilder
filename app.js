@@ -80,6 +80,12 @@ const state = {
 const viewerZoomLevels = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 const els = {
+  suiteHome: document.querySelector("#suiteHome"),
+  tileToolPage: document.querySelector("#tileToolPage"),
+  animatedToolPage: document.querySelector("#animatedToolPage"),
+  tileToolSelect: document.querySelector("#tileToolSelect"),
+  animatedToolSelect: document.querySelector("#animatedToolSelect"),
+  suiteBackButtons: [...document.querySelectorAll("[data-tool-page='home']")],
   controlTabs: [...document.querySelectorAll('[role="tab"]')],
   controlTabPanels: [...document.querySelectorAll('[role="tabpanel"]')],
   contextHelp: document.querySelector("#contextHelp"),
@@ -434,6 +440,47 @@ const controlHelp = {
 
 function activeControlTabId() {
   return els.controlTabs.find((tab) => tab.classList.contains("is-active"))?.id || "projectTab";
+}
+
+function activateToolPage(pageId, updateHash = true) {
+  const showTile = pageId === "tiles";
+  const showAnimated = pageId === "animated";
+  els.suiteHome.hidden = showTile || showAnimated;
+  els.tileToolPage.hidden = !showTile;
+  els.animatedToolPage.hidden = !showAnimated;
+
+  if (updateHash) {
+    const hash = showTile ? "#tiles" : showAnimated ? "#animated-sprites" : "";
+    if (window.location.hash !== hash) {
+      history.pushState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
+    }
+  }
+
+  if (showTile) {
+    updateStats();
+    updateContextHelp();
+    els.controlTabs.find((tab) => tab.classList.contains("is-active"))?.focus();
+    return;
+  }
+
+  if (showAnimated) {
+    document.querySelector("#animatedToolTitle")?.focus?.();
+    return;
+  }
+
+  els.tileToolSelect.focus();
+}
+
+function activateToolPageFromHash() {
+  if (window.location.hash === "#tiles") {
+    activateToolPage("tiles", false);
+    return;
+  }
+  if (window.location.hash === "#animated-sprites") {
+    activateToolPage("animated", false);
+    return;
+  }
+  activateToolPage("home", false);
 }
 
 function helpTileName(id, transparentLabel = "Transparent") {
@@ -4237,6 +4284,13 @@ for (const tab of els.controlTabs) {
   tab.addEventListener("click", () => activateControlTab(tab.id));
   tab.addEventListener("keydown", handleControlTabKeydown);
 }
+els.tileToolSelect.addEventListener("click", () => activateToolPage("tiles"));
+els.animatedToolSelect.addEventListener("click", () => activateToolPage("animated"));
+for (const button of els.suiteBackButtons) {
+  button.addEventListener("click", () => activateToolPage("home"));
+}
+window.addEventListener("popstate", activateToolPageFromHash);
+window.addEventListener("hashchange", activateToolPageFromHash);
 els.applySettings.addEventListener("click", applySettings);
 els.saveProject.addEventListener("click", saveProject);
 els.projectFileInput.addEventListener("change", (event) => {
@@ -4447,6 +4501,7 @@ renderGrid();
 applyResponsiveViewerScale();
 updateStats();
 updateContextHelp();
+activateToolPageFromHash();
 setStatus("Ready. Configure the project, then import sprites to build your palette.");
 
 window.__tileBuilderDebug = {

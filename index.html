@@ -3,21 +3,48 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tile Spritesheet Builder</title>
+    <title>Sprite Tool Suite</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="app-header">
       <div>
-        <p class="eyebrow">Tile workflow</p>
-        <h1>Tile Spritesheet Builder</h1>
+        <p class="eyebrow">Sprite workflow suite</p>
+        <h1>Sprite Tool Suite</h1>
       </div>
       <div class="header-actions">
         <button id="themeToggle" class="secondary-button" type="button" aria-pressed="false">Dark Mode</button>
       </div>
     </header>
 
-    <main class="app-shell">
+    <main class="suite-shell">
+      <section id="suiteHome" class="suite-home" aria-labelledby="suiteHomeTitle">
+        <div class="suite-heading">
+          <p class="eyebrow">Choose a tool</p>
+          <h2 id="suiteHomeTitle">What are you building today?</h2>
+        </div>
+        <div class="tool-picker" aria-label="Sprite tool choices">
+          <button id="tileToolSelect" class="tool-card" type="button">
+            <span class="tool-card-kicker">Tile based suite</span>
+            <strong>Tile Spritesheet Builder</strong>
+            <span>Project setup, import, palette editing, transitions, placement, culling, and export.</span>
+          </button>
+          <button id="animatedToolSelect" class="tool-card" type="button">
+            <span class="tool-card-kicker">Animation suite</span>
+            <strong>Animated Sprites Editor</strong>
+            <span>Plan frame sheets, timing, preview loops, and animation export workflows.</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="tileToolPage" class="tool-page app-shell" aria-labelledby="tileToolTitle" hidden>
+      <nav class="suite-tool-nav" aria-label="Sprite tools">
+        <button class="suite-back-button secondary-button" type="button" data-tool-page="home">All Tools</button>
+        <div>
+          <p class="eyebrow">Tile based suite</p>
+          <h2 id="tileToolTitle">Tile Spritesheet Builder</h2>
+        </div>
+      </nav>
       <nav class="workflow-nav" aria-label="Tile builder workflow">
         <div class="control-tabs" role="tablist" aria-label="Workflow screens">
           <button id="projectTab" class="control-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="projectScreen" title="Project Setup: choose tile mode, grid size, cell dimensions, sprite dimensions, and save or load full project files.">1. Project</button>
@@ -645,6 +672,79 @@
         <p id="contextHelpBody">Choose the project shape first. These values control how the grid is drawn, how imported sprite sheets are sliced, and how exports are sized.</p>
         <dl id="contextHelpDetails" class="help-details"></dl>
       </aside>
+      </section>
+
+      <section id="animatedToolPage" class="tool-page animated-tool-page" aria-labelledby="animatedToolTitle" hidden>
+        <nav class="suite-tool-nav" aria-label="Sprite tools">
+          <button class="suite-back-button secondary-button" type="button" data-tool-page="home">All Tools</button>
+          <div>
+            <p class="eyebrow">Animation suite</p>
+            <h2 id="animatedToolTitle">Animated Sprites Editor</h2>
+          </div>
+        </nav>
+        <div class="animated-editor-layout">
+          <section class="feature-panel animated-preview-panel">
+            <div class="screen-heading compact-screen-heading">
+              <p class="eyebrow">Preview</p>
+              <h3>Frame Loop</h3>
+              <p>Set up sprite animation timing and sheet dimensions before export.</p>
+            </div>
+            <div class="animation-preview-stage" aria-label="Animated sprite preview">
+              <div class="animation-preview-frame">Frame 01</div>
+            </div>
+            <div class="animation-transport" role="group" aria-label="Animation playback controls">
+              <button class="secondary-button" type="button">Previous</button>
+              <button class="primary-button" type="button">Play</button>
+              <button class="secondary-button" type="button">Next</button>
+            </div>
+          </section>
+          <section class="feature-panel animated-controls-panel">
+            <h3>Animation Settings</h3>
+            <p class="panel-description">This page is ready for the animated sprite workflow without changing the tile tools.</p>
+            <div class="dimension-control-grid">
+              <label>
+                Frame width
+                <input type="number" min="1" max="2048" value="64">
+              </label>
+              <label>
+                Frame height
+                <input type="number" min="1" max="2048" value="64">
+              </label>
+              <label>
+                Frames
+                <input type="number" min="1" max="512" value="8">
+              </label>
+              <label>
+                FPS
+                <input type="number" min="1" max="120" value="12">
+              </label>
+            </div>
+            <div class="project-file-tools">
+              <label class="file-picker">
+                <span>Import Frames</span>
+                <input type="file" accept="image/png" multiple>
+              </label>
+              <label class="file-picker">
+                <span>Import Sheet</span>
+                <input type="file" accept="image/png">
+              </label>
+            </div>
+          </section>
+          <section class="feature-panel animated-timeline-panel">
+            <h3>Timeline</h3>
+            <div class="timeline-strip" aria-label="Animation timeline frames">
+              <button class="timeline-frame is-active" type="button">1</button>
+              <button class="timeline-frame" type="button">2</button>
+              <button class="timeline-frame" type="button">3</button>
+              <button class="timeline-frame" type="button">4</button>
+              <button class="timeline-frame" type="button">5</button>
+              <button class="timeline-frame" type="button">6</button>
+              <button class="timeline-frame" type="button">7</button>
+              <button class="timeline-frame" type="button">8</button>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
 
     <dialog id="cropDialog" class="crop-dialog">

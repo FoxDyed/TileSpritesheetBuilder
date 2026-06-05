@@ -204,7 +204,9 @@ const pngs = {
 
 async function openApp(page) {
   await page.goto(appUrl);
-  await expect(page).toHaveTitle("Tile Spritesheet Builder");
+  await expect(page).toHaveTitle("Sprite Tool Suite");
+  await expect(page.getByRole("heading", { name: "What are you building today?" })).toBeVisible();
+  await page.getByRole("button", { name: /Tile Spritesheet Builder/ }).click();
   await expect(page.locator("#projectScreen")).toBeVisible();
   await expect(page.locator("#gridCanvas")).toBeHidden();
 }
@@ -217,6 +219,22 @@ async function clickExport(page, name) {
   await selectControlTab(page, "7. Export");
   await page.getByRole("button", { name }).click();
 }
+
+test("starts from a sprite tool selector and opens the animated sprite editor", async ({ page }) => {
+  await page.goto(appUrl);
+  await expect(page).toHaveTitle("Sprite Tool Suite");
+  await expect(page.getByRole("heading", { name: "What are you building today?" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "1. Project" })).toBeHidden();
+
+  await page.getByRole("button", { name: /Animated Sprites Editor/ }).click();
+  await expect(page).toHaveURL(/#animated-sprites$/);
+  await expect(page.getByRole("heading", { name: "Animated Sprites Editor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+  await expect(page.locator(".timeline-frame")).toHaveCount(8);
+
+  await page.getByRole("button", { name: "All Tools" }).click();
+  await expect(page.getByRole("heading", { name: "What are you building today?" })).toBeVisible();
+});
 
 async function downloadJsonFromClick(page, action) {
   const downloadPromise = page.waitForEvent("download");
